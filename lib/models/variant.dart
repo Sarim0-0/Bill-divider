@@ -1,12 +1,12 @@
-class Item {
+class Variant {
   final int? id;
-  final int eventId;
+  final int itemId;
   final String name;
   final double price;
 
-  Item({
+  Variant({
     this.id,
-    required this.eventId,
+    required this.itemId,
     required this.name,
     required this.price,
   });
@@ -14,34 +14,33 @@ class Item {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'event_id': eventId,
+      'item_id': itemId,
       'name': name,
       'price': price,
     };
   }
 
-  factory Item.fromMap(Map<String, dynamic> map) {
-    return Item(
+  factory Variant.fromMap(Map<String, dynamic> map) {
+    return Variant(
       id: map['id'] as int?,
-      eventId: map['event_id'] as int,
+      itemId: map['item_id'] as int,
       name: map['name'] as String,
       price: (map['price'] as num).toDouble(),
     );
   }
 
-  Item copyWith({
+  Variant copyWith({
     int? id,
-    int? eventId,
+    int? itemId,
     String? name,
     double? price,
   }) {
-    return Item(
+    return Variant(
       id: id ?? this.id,
-      eventId: eventId ?? this.eventId,
+      itemId: itemId ?? this.itemId,
       name: name ?? this.name,
       price: price ?? this.price,
     );
   }
 }
-
 
