@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'dart:io';
 import '../models/person.dart';
 import '../models/event.dart';
 import '../models/item.dart';
@@ -23,7 +24,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'bill_divider.db');
     return await openDatabase(
       path,
-      version: 9,
+      version: 12,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -170,6 +171,40 @@ class DatabaseService {
         await db.execute('ALTER TABLE event_payment_settings ADD COLUMN is_foodpanda INTEGER DEFAULT 0');
       } catch (_) {}
     }
+    if (oldVersion < 10) {
+      // Add miscellaneous_amount column to event_payment_settings
+      try {
+        await db.execute('ALTER TABLE event_payment_settings ADD COLUMN miscellaneous_amount REAL');
+      } catch (_) {}
+    }
+    if (oldVersion < 11) {
+      // Create item_person_assignments table to store person assignments for order items
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS item_person_assignments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_item_id INTEGER NOT NULL,
+          person_id INTEGER NOT NULL,
+          amount REAL NOT NULL,
+          FOREIGN KEY (order_item_id) REFERENCES event_order_items(id) ON DELETE CASCADE,
+          FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE,
+          UNIQUE(order_item_id, person_id)
+        )
+      ''');
+    }
+    if (oldVersion < 12) {
+      // Create event_person_paid_status table to store paid status for people in events
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS event_person_paid_status (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_id INTEGER NOT NULL,
+          person_id INTEGER NOT NULL,
+          is_paid INTEGER DEFAULT 0,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+          FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE,
+          UNIQUE(event_id, person_id)
+        )
+      ''');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -299,7 +334,34 @@ class DatabaseService {
         calculated_total REAL,
         discount_percentage REAL,
         is_foodpanda INTEGER DEFAULT 0,
+        miscellaneous_amount REAL,
         FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Create item_person_assignments table to store person assignments for order items
+    await db.execute('''
+      CREATE TABLE item_person_assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_item_id INTEGER NOT NULL,
+        person_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        FOREIGN KEY (order_item_id) REFERENCES event_order_items(id) ON DELETE CASCADE,
+        FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE,
+        UNIQUE(order_item_id, person_id)
+      )
+    ''');
+
+    // Create event_person_paid_status table to store paid status for people in events
+    await db.execute('''
+      CREATE TABLE event_person_paid_status (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id INTEGER NOT NULL,
+        person_id INTEGER NOT NULL,
+        is_paid INTEGER DEFAULT 0,
+        FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+        FOREIGN KEY (person_id) REFERENCES people(id) ON DELETE CASCADE,
+        UNIQUE(event_id, person_id)
       )
     ''');
   }
@@ -382,6 +444,76 @@ class DatabaseService {
     return await db.delete('events', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Get the most recent event with a given name (excluding a specific event ID)
+  Future<Event?> getMostRecentEventByName(String eventName, {int? excludeEventId}) async {
+    final db = await database;
+    String whereClause = 'name = ?';
+    List<dynamic> whereArgs = [eventName];
+    
+    if (excludeEventId != null) {
+      whereClause += ' AND id != ?';
+      whereArgs.add(excludeEventId);
+    }
+    
+    final List<Map<String, dynamic>> maps = await db.query(
+      'events',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'date DESC, id DESC',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Event.fromMap(maps.first);
+  }
+
+  /// Copy all items, variants, and add-ons from one event to another
+  Future<void> copyEventItems({
+    required int fromEventId,
+    required int toEventId,
+  }) async {
+    final db = await database;
+    
+    // Get all items from the source event
+    final sourceItems = await getItemsByEvent(fromEventId);
+    
+    // Map to track old item ID -> new item ID
+    Map<int, int> itemIdMap = {};
+    
+    // Copy each item
+    for (var sourceItem in sourceItems) {
+      // Create new item for the target event
+      final newItem = Item(
+        eventId: toEventId,
+        name: sourceItem.name,
+        price: sourceItem.price,
+      );
+      final newItemId = await insertItem(newItem);
+      itemIdMap[sourceItem.id!] = newItemId;
+      
+      // Copy variants for this item
+      final variants = await getVariantsByItem(sourceItem.id!);
+      for (var variant in variants) {
+        final newVariant = Variant(
+          itemId: newItemId,
+          name: variant.name,
+          price: variant.price,
+        );
+        await insertVariant(newVariant);
+      }
+      
+      // Copy add-ons for this item
+      final addOns = await getAddOnsByItem(sourceItem.id!);
+      for (var addOn in addOns) {
+        final newAddOn = AddOn(
+          itemId: newItemId,
+          name: addOn.name,
+          price: addOn.price,
+        );
+        await insertAddOn(newAddOn);
+      }
+    }
+  }
+
   // ==================== Event-People Operations ====================
 
   Future<void> addPersonToEvent(int eventId, int personId) async {
@@ -422,6 +554,61 @@ class DatabaseService {
       ORDER BY e.date DESC, e.name ASC
     ''', [personId]);
     return List.generate(maps.length, (i) => Event.fromMap(maps[i]));
+  }
+
+  /// Count unpaid events for a person
+  /// An event is unpaid if the person has assignments but hasn't paid
+  Future<int> getUnpaidEventsCountForPerson(int personId) async {
+    final db = await database;
+    
+    // Get all events where the person has assignments
+    final List<Map<String, dynamic>> eventsWithAssignments = await db.rawQuery('''
+      SELECT DISTINCT e.id as event_id
+      FROM events e
+      INNER JOIN event_order_items eoi ON e.id = eoi.event_id
+      INNER JOIN item_person_assignments ipa ON eoi.id = ipa.order_item_id
+      WHERE ipa.person_id = ?
+    ''', [personId]);
+    
+    if (eventsWithAssignments.isEmpty) {
+      return 0;
+    }
+    
+    int unpaidCount = 0;
+    
+    // Check each event to see if the person has paid
+    for (var eventMap in eventsWithAssignments) {
+      final eventId = eventMap['event_id'] as int;
+      final isPaid = await getPersonPaidStatus(eventId, personId);
+      if (!isPaid) {
+        unpaidCount++;
+      }
+    }
+    
+    return unpaidCount;
+  }
+
+  /// Check if a person has paid for a specific event
+  /// Returns true if the person has no assignments OR has paid
+  Future<bool> hasPersonPaidForEvent(int eventId, int personId) async {
+    final db = await database;
+    // Check if person has any assignments in this event
+    final assignments = await db.rawQuery('''
+      SELECT COUNT(*) as count
+      FROM item_person_assignments ipa
+      INNER JOIN event_order_items eoi ON ipa.order_item_id = eoi.id
+      WHERE eoi.event_id = ? AND ipa.person_id = ?
+    ''', [eventId, personId]);
+    
+    final hasAssignments = (assignments.first['count'] as int) > 0;
+    
+    if (!hasAssignments) {
+      // Person has no assignments, so they don't owe anything
+      return true;
+    }
+    
+    // Person has assignments, check if they've paid
+    return await getPersonPaidStatus(eventId, personId);
   }
 
   // ==================== Item Operations ====================
@@ -833,6 +1020,7 @@ class DatabaseService {
     double? calculatedTotal,
     double? discountPercentage,
     bool? isFoodpanda,
+    double? miscellaneousAmount,
   }) async {
     final db = await database;
     final existing = await getEventPaymentSettings(eventId);
@@ -845,6 +1033,7 @@ class DatabaseService {
       'calculated_total': calculatedTotal ?? existing?['calculated_total'],
       'discount_percentage': discountPercentage ?? existing?['discount_percentage'],
       'is_foodpanda': isFoodpanda != null ? (isFoodpanda ? 1 : 0) : (existing?['is_foodpanda'] ?? 0),
+      'miscellaneous_amount': miscellaneousAmount ?? existing?['miscellaneous_amount'],
     };
 
     await db.insert(
@@ -866,9 +1055,224 @@ class DatabaseService {
     return maps.first;
   }
 
+  // ==================== Item-Person Assignment Operations ====================
+
+  /// Save or update person assignments for an order item
+  Future<void> saveItemPersonAssignments({
+    required int orderItemId,
+    required List<Map<String, dynamic>> assignments, // [{person_id: int, amount: double}]
+  }) async {
+    final db = await database;
+    
+    // Delete existing assignments for this order item
+    await db.delete(
+      'item_person_assignments',
+      where: 'order_item_id = ?',
+      whereArgs: [orderItemId],
+    );
+    
+    // Insert new assignments
+    for (var assignment in assignments) {
+      await db.insert(
+        'item_person_assignments',
+        {
+          'order_item_id': orderItemId,
+          'person_id': assignment['person_id'],
+          'amount': assignment['amount'],
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+  }
+
+  /// Get all person assignments for an order item
+  Future<List<Map<String, dynamic>>> getItemPersonAssignments(int orderItemId) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT ipa.*, p.name as person_name
+      FROM item_person_assignments ipa
+      INNER JOIN people p ON ipa.person_id = p.id
+      WHERE ipa.order_item_id = ?
+      ORDER BY p.name ASC
+    ''', [orderItemId]);
+  }
+
+  /// Get all assignments for an event (all order items)
+  Future<List<Map<String, dynamic>>> getEventPersonAssignments(int eventId) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT ipa.*, p.name as person_name, eoi.id as order_item_id
+      FROM item_person_assignments ipa
+      INNER JOIN people p ON ipa.person_id = p.id
+      INNER JOIN event_order_items eoi ON ipa.order_item_id = eoi.id
+      WHERE eoi.event_id = ?
+      ORDER BY eoi.id, p.name ASC
+    ''', [eventId]);
+  }
+
+  // ==================== Paid Status Operations ====================
+
+  /// Save or update paid status for a person in an event
+  Future<void> savePersonPaidStatus({
+    required int eventId,
+    required int personId,
+    required bool isPaid,
+  }) async {
+    final db = await database;
+    await db.insert(
+      'event_person_paid_status',
+      {
+        'event_id': eventId,
+        'person_id': personId,
+        'is_paid': isPaid ? 1 : 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get paid status for all people in an event
+  Future<Map<int, bool>> getEventPaidStatus(int eventId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'event_person_paid_status',
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+    );
+    
+    Map<int, bool> paidStatus = {};
+    for (var map in maps) {
+      final personId = map['person_id'] as int;
+      final isPaid = (map['is_paid'] as int) == 1;
+      paidStatus[personId] = isPaid;
+    }
+    
+    return paidStatus;
+  }
+
+  /// Get paid status for a specific person in an event
+  Future<bool> getPersonPaidStatus(int eventId, int personId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'event_person_paid_status',
+      where: 'event_id = ? AND person_id = ?',
+      whereArgs: [eventId, personId],
+    );
+    
+    if (maps.isEmpty) return false;
+    return (maps.first['is_paid'] as int) == 1;
+  }
+
+  /// Check if all people who owe money in an event have paid
+  Future<bool> areAllPeoplePaid(int eventId) async {
+    // Get all people who have assignments (owe money) in this event
+    final assignments = await getEventPersonAssignments(eventId);
+    
+    if (assignments.isEmpty) {
+      // No one owes money, so consider it as "all paid"
+      return true;
+    }
+    
+    // Get unique person IDs who have assignments
+    final personIdsWithAssignments = assignments
+        .map((a) => a['person_id'] as int)
+        .toSet();
+    
+    if (personIdsWithAssignments.isEmpty) {
+      return true;
+    }
+    
+    // Get paid status for all people in the event
+    final paidStatus = await getEventPaidStatus(eventId);
+    
+    // Check if all people with assignments have paid
+    for (var personId in personIdsWithAssignments) {
+      if (paidStatus[personId] != true) {
+        return false; // At least one person hasn't paid
+      }
+    }
+    
+    return true; // All people with assignments have paid
+  }
+
   Future<void> closeDatabase() async {
     final db = await database;
     await db.close();
+  }
+
+  // ==================== Database Reset Operations ====================
+
+  /// Clear all data from all tables (keeps schema intact)
+  Future<void> clearAllData() async {
+    final db = await database;
+    
+    // Disable foreign key constraints temporarily
+    await db.execute('PRAGMA foreign_keys = OFF');
+    
+    try {
+      // Get list of all tables
+      final List<Map<String, dynamic>> tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+      );
+      
+      // Delete all data from all tables (order matters due to foreign keys)
+      final tableNames = [
+        'event_person_paid_status',
+        'item_person_assignments',
+        'event_payment_settings',
+        'order_items',
+        'item_addon_selections',
+        'item_variant_selections',
+        'add_ons',
+        'variants',
+        'items',
+        'event_people',
+        'events',
+        'people',
+      ];
+      
+      for (final tableName in tableNames) {
+        // Check if table exists before trying to delete
+        final tableExists = tables.any((table) => table['name'] == tableName);
+        if (tableExists) {
+          try {
+            await db.delete(tableName);
+          } catch (e) {
+            // Ignore errors if table doesn't exist or is empty
+            print('Warning: Could not delete from $tableName: $e');
+          }
+        }
+      }
+      
+      // Reset auto-increment counters
+      try {
+        await db.execute('DELETE FROM sqlite_sequence');
+      } catch (e) {
+        // Ignore if sqlite_sequence doesn't exist
+      }
+    } finally {
+      // Re-enable foreign key constraints
+      await db.execute('PRAGMA foreign_keys = ON');
+    }
+  }
+
+  /// Delete the entire database file and recreate it
+  Future<void> deleteDatabaseFile() async {
+    try {
+      final db = await database;
+      await db.close();
+    } catch (e) {
+      // Database might not be open
+    }
+    _database = null;
+    
+    String path = join(await getDatabasesPath(), 'bill_divider.db');
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    
+    // Reinitialize database
+    _database = await _initDatabase();
   }
 }
 

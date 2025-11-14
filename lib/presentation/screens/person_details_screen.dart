@@ -3,6 +3,7 @@ import '../../models/person.dart';
 import '../../models/event.dart';
 import '../../services/database_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'final_details_screen.dart';
 
 class PersonDetailsScreen extends StatefulWidget {
   final Person person;
@@ -19,6 +20,7 @@ class PersonDetailsScreen extends StatefulWidget {
 class _PersonDetailsScreenState extends State<PersonDetailsScreen> {
   final DatabaseService _dbService = DatabaseService();
   List<Event> _events = [];
+  Map<int, bool> _eventPaidStatus = {}; // event_id -> has paid
   bool _isLoading = true;
 
   @override
@@ -30,8 +32,19 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> {
   Future<void> _loadEvents() async {
     setState(() => _isLoading = true);
     final events = await _dbService.getEventsForPerson(widget.person.id!);
+    
+    // Load paid status for each event
+    Map<int, bool> paidStatus = {};
+    for (var event in events) {
+      if (event.id != null) {
+        final hasPaid = await _dbService.hasPersonPaidForEvent(event.id!, widget.person.id!);
+        paidStatus[event.id!] = hasPaid;
+      }
+    }
+    
     setState(() {
       _events = events;
+      _eventPaidStatus = paidStatus;
       _isLoading = false;
     });
   }
@@ -92,9 +105,11 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> {
                   widget.person.name,
                   style: TextStyle(
                     color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                    fontSize: 28,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -137,14 +152,22 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> {
                         ),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         itemCount: _events.length,
                         itemBuilder: (context, index) {
                           final event = _events[index];
+                          final hasPaid = _eventPaidStatus[event.id] ?? true;
+                          final shouldShowRed = !hasPaid;
+                          
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             decoration: BoxDecoration(
-                              color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                              color: shouldShowRed
+                                  ? Colors.red.withOpacity(isDark ? 0.3 : 0.2)
+                                  : (isDark ? AppTheme.darkSurface : AppTheme.lightSurface),
+                              border: shouldShowRed
+                                  ? Border.all(color: Colors.red.withOpacity(0.5), width: 2)
+                                  : null,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
@@ -175,21 +198,66 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> {
                               title: Text(
                                 event.name,
                                 style: TextStyle(
-                                  color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                  color: shouldShowRed
+                                      ? Colors.red.shade700
+                                      : (isDark ? AppTheme.darkText : AppTheme.lightText),
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                 ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                               subtitle: Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Text(
                                   _formatDate(event.date),
                                   style: TextStyle(
-                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                    color: shouldShowRed
+                                        ? Colors.red.shade600
+                                        : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
                                     fontSize: 14,
                                   ),
                                 ),
                               ),
+                              onTap: () async {
+                                // Load order items and payment settings for final details screen
+                                final orderItemsRaw = await _dbService.getOrderItemsByEvent(event.id!);
+                                
+                                // Load add-ons for each order item
+                                List<Map<String, dynamic>> orderItems = [];
+                                for (var orderItemRaw in orderItemsRaw) {
+                                  final orderItem = Map<String, dynamic>.from(orderItemRaw);
+                                  final addOns = await _dbService.getOrderItemAddOns(orderItem['id'] as int);
+                                  orderItem['addons'] = addOns;
+                                  orderItems.add(orderItem);
+                                }
+                                
+                                // Load payment settings
+                                final paymentSettings = await _dbService.getEventPaymentSettings(event.id!);
+                                
+                                if (context.mounted) {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => FinalDetailsScreen(
+                                        event: event,
+                                        orderItems: orderItems,
+                                        paymentMethod: paymentSettings?['payment_method'] as String?,
+                                        taxType: paymentSettings?['tax_type'] as String?,
+                                        discountPercentage: paymentSettings?['discount_percentage'] as double?,
+                                        isFoodpanda: (paymentSettings?['is_foodpanda'] as int? ?? 0) == 1,
+                                        miscellaneousAmount: paymentSettings?['miscellaneous_amount'] as double?,
+                                        calculatedTotal: paymentSettings?['calculated_total'] as double?,
+                                      ),
+                                    ),
+                                  );
+                                  
+                                  // Reload events to update paid status after returning
+                                  if (result == true) {
+                                    _loadEvents();
+                                  }
+                                }
+                              },
                             ),
                           );
                         },
@@ -201,7 +269,7 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.darkPrimary,
                   foregroundColor: Colors.white,
@@ -225,6 +293,7 @@ class _PersonDetailsScreenState extends State<PersonDetailsScreen> {
     );
   }
 }
+
 
 
 

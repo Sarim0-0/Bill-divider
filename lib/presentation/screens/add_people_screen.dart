@@ -14,6 +14,7 @@ class AddPeopleScreen extends StatefulWidget {
 class _AddPeopleScreenState extends State<AddPeopleScreen> {
   final DatabaseService _dbService = DatabaseService();
   List<Person> _people = [];
+  Map<int, int> _unpaidCounts = {}; // person_id -> unpaid events count
   bool _isLoading = true;
 
   @override
@@ -25,8 +26,19 @@ class _AddPeopleScreenState extends State<AddPeopleScreen> {
   Future<void> _loadPeople() async {
     setState(() => _isLoading = true);
     final people = await _dbService.getAllPeople();
+    
+    // Load unpaid counts for each person
+    Map<int, int> unpaidCounts = {};
+    for (var person in people) {
+      if (person.id != null) {
+        final count = await _dbService.getUnpaidEventsCountForPerson(person.id!);
+        unpaidCounts[person.id!] = count;
+      }
+    }
+    
     setState(() {
       _people = people;
+      _unpaidCounts = unpaidCounts;
       _isLoading = false;
     });
   }
@@ -269,6 +281,7 @@ class _AddPeopleScreenState extends State<AddPeopleScreen> {
                   itemCount: _people.length,
                   itemBuilder: (context, index) {
                     final person = _people[index];
+                    final unpaidCount = _unpaidCounts[person.id] ?? 0;
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
@@ -287,26 +300,61 @@ class _AddPeopleScreenState extends State<AddPeopleScreen> {
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        leading: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppTheme.darkPrimary.withOpacity(0.2),
-                          ),
-                          child: Icon(
-                            Icons.person_rounded,
-                            color: AppTheme.darkPrimary,
-                            size: 24,
-                          ),
+                        leading: Stack(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppTheme.darkPrimary.withOpacity(0.2),
+                              ),
+                              child: Icon(
+                                Icons.person_rounded,
+                                color: AppTheme.darkPrimary,
+                                size: 24,
+                              ),
+                            ),
+                            if (unpaidCount > 0)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 18,
+                                    minHeight: 18,
+                                  ),
+                                  child: Text(
+                                    unpaidCount > 99 ? '99+' : unpaidCount.toString(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         title: Text(
                           person.name,
                           style: TextStyle(
                             color: isDark ? AppTheme.darkText : AppTheme.lightText,
                             fontWeight: FontWeight.w500,
-                            fontSize: 16,
+                            fontSize: 15,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                         trailing: IconButton(
                           icon: Icon(
@@ -315,13 +363,17 @@ class _AddPeopleScreenState extends State<AddPeopleScreen> {
                           ),
                           onPressed: () => _deletePerson(person),
                         ),
-                        onTap: () {
-                          Navigator.push(
+                        onTap: () async {
+                          final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => PersonDetailsScreen(person: person),
                             ),
                           );
+                          // Reload to update unpaid counts after returning
+                          if (result == true) {
+                            _loadPeople();
+                          }
                         },
                       ),
                     );

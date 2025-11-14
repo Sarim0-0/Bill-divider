@@ -5,13 +5,16 @@ import '../../models/variant.dart';
 import '../../models/add_on.dart';
 import '../../services/database_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'division_screen.dart';
 
 class EventItemsScreen extends StatefulWidget {
   final Event event;
+  final bool returnToEvents; // If true, Close button in FinalDetailsScreen returns to events list
 
   const EventItemsScreen({
     super.key,
     required this.event,
+    this.returnToEvents = false,
   });
 
   @override
@@ -25,10 +28,11 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
   bool _isLoading = true;
   
   // Payment and tax settings (nullable to allow no selection)
-  String? _paymentMethod; // 'Cash' or 'Card' or null
-  String? _taxType; // 'Tax Exclusive' or 'Tax Inclusive' or null
+  String? _paymentMethod; // 'Cash', 'Card', 'Normal', or null
+  String? _taxType; // 'Tax Exclusive', 'Tax Inclusive', 'None', or null
   double? _discountPercentage; // Discount percentage
-  bool _isFoodpanda = false; // Foodpanda radio button state
+  bool _isFoodpanda = false; // Foodpanda checkbox state
+  double? _miscellaneousAmount; // Miscellaneous amount in rupees
   
   // Calculated values
   double? _calculatedTax;
@@ -36,6 +40,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
   
   // Text controller for discount input
   final TextEditingController _discountController = TextEditingController();
+  // Text controller for miscellaneous input
+  final TextEditingController _miscellaneousController = TextEditingController();
 
   @override
   void initState() {
@@ -47,6 +53,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
   @override
   void dispose() {
     _discountController.dispose();
+    _miscellaneousController.dispose();
     super.dispose();
   }
   
@@ -60,10 +67,15 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
         _calculatedTotal = settings['calculated_total'] as double?;
         _discountPercentage = settings['discount_percentage'] as double?;
         _isFoodpanda = (settings['is_foodpanda'] as int? ?? 0) == 1;
+        _miscellaneousAmount = settings['miscellaneous_amount'] as double?;
         
         // Set discount controller text if discount exists
         if (_discountPercentage != null) {
           _discountController.text = _discountPercentage!.toStringAsFixed(0);
+        }
+        // Set miscellaneous controller text if miscellaneous amount exists
+        if (_miscellaneousAmount != null) {
+          _miscellaneousController.text = _miscellaneousAmount!.toStringAsFixed(2);
         }
       });
     }
@@ -80,6 +92,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       calculatedTotal: saveCalculated ? _calculatedTotal : null, // null means preserve existing
       discountPercentage: _discountPercentage,
       isFoodpanda: _isFoodpanda,
+      miscellaneousAmount: _miscellaneousAmount,
     );
   }
 
@@ -123,85 +136,88 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
           style: TextStyle(
             color: isDark ? AppTheme.darkText : AppTheme.lightText,
             fontWeight: FontWeight.w600,
+            fontSize: 16,
           ),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              style: TextStyle(
-                color: isDark ? AppTheme.darkText : AppTheme.lightText,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Item Name',
-                labelStyle: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                ),
-                hintText: 'Enter item name',
-                hintStyle: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: AppTheme.darkPrimary,
-                    width: 2,
-                  ),
-                ),
-                filled: true,
-                fillColor: isDark 
-                    ? AppTheme.darkBackground 
-                    : AppTheme.lightBackground,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              style: TextStyle(
-                color: isDark ? AppTheme.darkText : AppTheme.lightText,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Price',
-                labelStyle: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                ),
-                hintText: '0.00',
-                hintStyle: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: AppTheme.darkPrimary,
-                    width: 2,
-                  ),
-                ),
-                filled: true,
-                fillColor: isDark 
-                    ? AppTheme.darkBackground 
-                    : AppTheme.lightBackground,
-                prefixText: 'Rs. ',
-                prefixStyle: TextStyle(
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                style: TextStyle(
                   color: isDark ? AppTheme.darkText : AppTheme.lightText,
                 ),
+                decoration: InputDecoration(
+                  labelText: 'Item Name',
+                  labelStyle: TextStyle(
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  ),
+                  hintText: 'Enter item name',
+                  hintStyle: TextStyle(
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: AppTheme.darkPrimary,
+                      width: 2,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor: isDark 
+                      ? AppTheme.darkBackground 
+                      : AppTheme.lightBackground,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: priceController,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                style: TextStyle(
+                  color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Price',
+                  labelStyle: TextStyle(
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  ),
+                  hintText: '0.00',
+                  hintStyle: TextStyle(
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: AppTheme.darkPrimary,
+                      width: 2,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor: isDark 
+                      ? AppTheme.darkBackground 
+                      : AppTheme.lightBackground,
+                  prefixText: 'Rs. ',
+                  prefixStyle: TextStyle(
+                    color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -345,26 +361,32 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
               style: TextStyle(
                 color: isDark ? AppTheme.darkText : AppTheme.lightText,
                 fontWeight: FontWeight.w600,
-                fontSize: 20,
+                fontSize: 16,
               ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   // Base price display (read-only)
                   Text(
                     'Base Price',
                     style: TextStyle(
                       color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                       borderRadius: BorderRadius.circular(12),
@@ -374,22 +396,31 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          variantSelection != null 
-                              ? 'Variant: ${variantSelection['variant_name']}'
-                              : 'Base Item',
-                          style: TextStyle(
-                            color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                            fontSize: 14,
+                        Flexible(
+                          child: Text(
+                            variantSelection != null 
+                                ? 'Variant: ${variantSelection['variant_name']}'
+                                : 'Base Item',
+                            style: TextStyle(
+                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
-                        Text(
-                          _formatPrice(basePrice),
-                          style: TextStyle(
-                            color: AppTheme.darkPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            _formatPrice(basePrice),
+                            style: TextStyle(
+                              color: AppTheme.darkPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.end,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -399,7 +430,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                   // Summary box
                   if (variantSelection != null || addOnSelections.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                         borderRadius: BorderRadius.circular(12),
@@ -415,7 +446,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                             'Summary',
                             style: TextStyle(
                               color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -423,34 +454,67 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           if (variantSelection != null)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(
-                                'Variant: ${variantSelection['variant_name']} (${_formatPrice((variantSelection['variant_price'] as num).toDouble())})',
-                                style: TextStyle(
-                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                  fontSize: 12,
-                                ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Variant: ',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '${variantSelection['variant_name']} (${_formatPrice((variantSelection['variant_price'] as num).toDouble())})',
+                                      style: TextStyle(
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                        fontSize: 10,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           if (addOnSelections.isNotEmpty)
                             Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
+                              padding: const EdgeInsets.only(bottom: 2),
                               child: Text(
                                 'Add-ons: ${addOnSelections.length} added',
                                 style: TextStyle(
                                   color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                  fontSize: 12,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
                           if (addOnSelections.isNotEmpty)
                             ...addOnSelections.map((addOn) => Padding(
-                              padding: const EdgeInsets.only(left: 8, top: 2),
-                              child: Text(
-                                '  • ${addOn['addon_name']} x${addOn['quantity']} (${_formatPrice((addOn['addon_price'] as num).toDouble() * (addOn['quantity'] as int))})',
-                                style: TextStyle(
-                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                  fontSize: 11,
-                                ),
+                              padding: const EdgeInsets.only(left: 12, top: 2),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '• ',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '${addOn['addon_name']} x${addOn['quantity']} (${_formatPrice((addOn['addon_price'] as num).toDouble() * (addOn['quantity'] as int))})',
+                                      style: TextStyle(
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                        fontSize: 10,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                ],
                               ),
                             )).toList(),
                         ],
@@ -463,7 +527,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                     'Quantity',
                     style: TextStyle(
                       color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -502,7 +566,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -524,7 +588,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                   const SizedBox(height: 24),
                   // Total price (calculated from finalPrice * quantity)
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                       borderRadius: BorderRadius.circular(12),
@@ -536,7 +600,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           'Total:',
                           style: TextStyle(
                             color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -544,7 +608,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           _formatPrice(finalPrice * quantity),
                           style: TextStyle(
                             color: AppTheme.darkPrimary,
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -568,7 +632,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                             foregroundColor: isDark ? AppTheme.darkText : AppTheme.lightText,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(
@@ -593,7 +657,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                             foregroundColor: isDark ? AppTheme.darkText : AppTheme.lightText,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(
@@ -609,6 +673,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                 ],
               ),
             ),
+          ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -784,7 +849,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                         'No items added yet',
                         style: TextStyle(
                           color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                          fontSize: 16,
+                          fontSize: 15,
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -796,8 +861,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           backgroundColor: AppTheme.darkSecondary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
+                            horizontal: 16,
+                            vertical: 10,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -811,7 +876,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                   children: [
                     // Add Items button in top left
                     Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(12.0),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: ElevatedButton.icon(
@@ -822,8 +887,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                             backgroundColor: AppTheme.darkSecondary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
+                              horizontal: 12,
+                              vertical: 8,
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -845,7 +910,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                 'Available',
                                 style: TextStyle(
                                   color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                  fontSize: 18,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -873,25 +938,31 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                   ),
                                   child: ListTile(
                                     contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 12,
+                                      horizontal: 12,
+                                      vertical: 10,
                                     ),
                                     // Item name on the left
-                                    leading: Text(
+                                    title: Text(
                                       item.name,
                                       style: TextStyle(
                                         color: isDark ? AppTheme.darkText : AppTheme.lightText,
                                         fontWeight: FontWeight.w500,
-                                        fontSize: 16,
+                                        fontSize: 15,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2,
                                     ),
                                     // Base price on the right (always shows base price)
-                                    trailing: Text(
-                                      _formatPrice(item.price),
-                                      style: TextStyle(
-                                        color: AppTheme.darkPrimary,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
+                                    trailing: Flexible(
+                                      child: Text(
+                                        _formatPrice(item.price),
+                                        style: TextStyle(
+                                          color: AppTheme.darkPrimary,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.end,
                                       ),
                                     ),
                                     onTap: () {
@@ -909,7 +980,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                 'Added',
                                 style: TextStyle(
                                   color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                  fontSize: 18,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -917,13 +988,13 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                             const SizedBox(height: 8),
                             _orderItems.isEmpty
                                 ? Padding(
-                                    padding: const EdgeInsets.all(16.0),
+                                    padding: const EdgeInsets.all(12.0),
                                     child: Center(
                                       child: Text(
                                         'No items added to order yet',
                                         style: TextStyle(
                                           color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                                          fontSize: 14,
+                                          fontSize: 13,
                                         ),
                                       ),
                                     ),
@@ -942,7 +1013,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                             // Payment Method and Tax Type Section
                             Container(
                               margin: const EdgeInsets.all(16),
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
                                 borderRadius: BorderRadius.circular(12),
@@ -958,53 +1029,92 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                     'Payment Method',
                                     style: TextStyle(
                                       color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  Row(
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
                                     children: [
-                                      Radio<String?>(
-                                        value: 'Cash',
-                                        groupValue: _paymentMethod,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            // Toggle: if already selected, deselect it
-                                            _paymentMethod = (_paymentMethod == 'Cash') ? null : value;
-                                            // Don't clear calculated values when changing selection
-                                            // They will be recalculated when Calculate is clicked
-                                          });
-                                          _savePaymentSettings();
-                                        },
-                                        activeColor: AppTheme.darkPrimary,
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String?>(
+                                            value: 'Cash',
+                                            groupValue: _paymentMethod,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                // Toggle: if already selected, deselect it
+                                                _paymentMethod = (_paymentMethod == 'Cash') ? null : value;
+                                                // Don't clear calculated values when changing selection
+                                                // They will be recalculated when Calculate is clicked
+                                              });
+                                              _savePaymentSettings();
+                                            },
+                                            activeColor: AppTheme.darkPrimary,
+                                          ),
+                                          Text(
+                                            'Cash (16%)',
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      Text(
-                                        'Cash (16%)',
-                                        style: TextStyle(
-                                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                        ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String?>(
+                                            value: 'Card',
+                                            groupValue: _paymentMethod,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                // Toggle: if already selected, deselect it
+                                                _paymentMethod = (_paymentMethod == 'Card') ? null : value;
+                                                // Don't clear calculated values when changing selection
+                                                // They will be recalculated when Calculate is clicked
+                                              });
+                                              _savePaymentSettings();
+                                            },
+                                            activeColor: AppTheme.darkPrimary,
+                                          ),
+                                          Text(
+                                            'Card (5%)',
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 24),
-                                      Radio<String?>(
-                                        value: 'Card',
-                                        groupValue: _paymentMethod,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            // Toggle: if already selected, deselect it
-                                            _paymentMethod = (_paymentMethod == 'Card') ? null : value;
-                                            // Don't clear calculated values when changing selection
-                                            // They will be recalculated when Calculate is clicked
-                                          });
-                                          _savePaymentSettings();
-                                        },
-                                        activeColor: AppTheme.darkPrimary,
-                                      ),
-                                      Text(
-                                        'Card (5%)',
-                                        style: TextStyle(
-                                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                        ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String?>(
+                                            value: 'Normal',
+                                            groupValue: _paymentMethod,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                // Toggle: if already selected, deselect it
+                                                _paymentMethod = (_paymentMethod == 'Normal') ? null : value;
+                                                // Don't clear calculated values when changing selection
+                                                // They will be recalculated when Calculate is clicked
+                                              });
+                                              _savePaymentSettings();
+                                            },
+                                            activeColor: AppTheme.darkPrimary,
+                                          ),
+                                          Text(
+                                            'Normal',
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -1014,53 +1124,92 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                     'Tax Type',
                                     style: TextStyle(
                                       color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  Row(
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
                                     children: [
-                                      Radio<String?>(
-                                        value: 'Tax Exclusive',
-                                        groupValue: _taxType,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            // Toggle: if already selected, deselect it
-                                            _taxType = (_taxType == 'Tax Exclusive') ? null : value;
-                                            // Don't clear calculated values when changing selection
-                                            // They will be recalculated when Calculate is clicked
-                                          });
-                                          _savePaymentSettings();
-                                        },
-                                        activeColor: AppTheme.darkPrimary,
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String?>(
+                                            value: 'Tax Exclusive',
+                                            groupValue: _taxType,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                // Toggle: if already selected, deselect it
+                                                _taxType = (_taxType == 'Tax Exclusive') ? null : value;
+                                                // Don't clear calculated values when changing selection
+                                                // They will be recalculated when Calculate is clicked
+                                              });
+                                              _savePaymentSettings();
+                                            },
+                                            activeColor: AppTheme.darkPrimary,
+                                          ),
+                                          Text(
+                                            'Tax Exclusive',
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      Text(
-                                        'Tax Exclusive',
-                                        style: TextStyle(
-                                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                        ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String?>(
+                                            value: 'Tax Inclusive',
+                                            groupValue: _taxType,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                // Toggle: if already selected, deselect it
+                                                _taxType = (_taxType == 'Tax Inclusive') ? null : value;
+                                                // Don't clear calculated values when changing selection
+                                                // They will be recalculated when Calculate is clicked
+                                              });
+                                              _savePaymentSettings();
+                                            },
+                                            activeColor: AppTheme.darkPrimary,
+                                          ),
+                                          Text(
+                                            'Tax Inclusive',
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 24),
-                                      Radio<String?>(
-                                        value: 'Tax Inclusive',
-                                        groupValue: _taxType,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            // Toggle: if already selected, deselect it
-                                            _taxType = (_taxType == 'Tax Inclusive') ? null : value;
-                                            // Don't clear calculated values when changing selection
-                                            // They will be recalculated when Calculate is clicked
-                                          });
-                                          _savePaymentSettings();
-                                        },
-                                        activeColor: AppTheme.darkPrimary,
-                                      ),
-                                      Text(
-                                        'Tax Inclusive',
-                                        style: TextStyle(
-                                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                        ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String?>(
+                                            value: 'None',
+                                            groupValue: _taxType,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                // Toggle: if already selected, deselect it
+                                                _taxType = (_taxType == 'None') ? null : value;
+                                                // Don't clear calculated values when changing selection
+                                                // They will be recalculated when Calculate is clicked
+                                              });
+                                              _savePaymentSettings();
+                                            },
+                                            activeColor: AppTheme.darkPrimary,
+                                          ),
+                                          Text(
+                                            'None',
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -1070,7 +1219,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                     'Discount',
                                     style: TextStyle(
                                       color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -1114,14 +1263,17 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                           },
                                         ),
                                       ),
-                                      const SizedBox(width: 16),
-                                      Radio<bool>(
-                                        value: true,
-                                        groupValue: _isFoodpanda ? true : null,
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // Foodpanda Checkbox
+                                  Row(
+                                    children: [
+                                      Checkbox(
+                                        value: _isFoodpanda,
                                         onChanged: (value) {
                                           setState(() {
-                                            // Toggle: if already selected, deselect it
-                                            _isFoodpanda = !_isFoodpanda;
+                                            _isFoodpanda = value ?? false;
                                             _calculatedTax = null;
                                             _calculatedTotal = null;
                                           });
@@ -1129,13 +1281,63 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                         },
                                         activeColor: AppTheme.darkPrimary,
                                       ),
-                                      Text(
-                                        'foodpanda',
-                                        style: TextStyle(
-                                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                      Expanded(
+                                        child: Text(
+                                          'foodpanda',
+                                          style: TextStyle(
+                                            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                            fontSize: 13,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // Miscellaneous Section
+                                  Text(
+                                    'Miscellaneous',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: _miscellaneousController,
+                                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: '0',
+                                      prefixText: 'Rs. ',
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: AppTheme.darkPrimary,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+                                    ),
+                                    onChanged: (value) {
+                                      final miscAmount = double.tryParse(value);
+                                      setState(() {
+                                        _miscellaneousAmount = miscAmount;
+                                        _calculatedTax = null;
+                                        _calculatedTotal = null;
+                                      });
+                                      _savePaymentSettings();
+                                    },
                                   ),
                                   const SizedBox(height: 24),
                                   // Calculate Button
@@ -1157,7 +1359,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                       child: const Text(
                                         'Calculate',
                                         style: TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 15,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -1166,7 +1368,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                   const SizedBox(height: 16),
                                   // Tax and Total Display
                                   Container(
-                                    padding: const EdgeInsets.all(16),
+                                    padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                       color: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                                       borderRadius: BorderRadius.circular(12),
@@ -1175,29 +1377,34 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                       children: [
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment: CrossAxisAlignment.center,
                                           children: [
                                             Text(
                                               'Tax:',
                                               style: TextStyle(
                                                 color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                                fontSize: 16,
+                                                fontSize: 15,
                                                 fontWeight: FontWeight.w500,
                                               ),
                                             ),
-                                            Text(
-                                              _calculatedTax != null
-                                                  ? (_calculatedTax == -1
-                                                      ? (_paymentMethod == 'Cash' && _taxType == 'Tax Inclusive'
-                                                          ? 'Included'
-                                                          : '-')
-                                                      : (_taxType == 'Tax Exclusive'
-                                                          ? '+${_formatPrice(_calculatedTax!)}'
-                                                          : '-${_formatPrice(_calculatedTax!)}'))
-                                                  : '',
-                                              style: TextStyle(
-                                                color: AppTheme.darkPrimary,
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
+                                            Flexible(
+                                              child: Text(
+                                                _calculatedTax != null
+                                                    ? (_calculatedTax == -1
+                                                        ? (_paymentMethod == 'Cash' && _taxType == 'Tax Inclusive'
+                                                            ? 'Included'
+                                                            : '-')
+                                                        : (_taxType == 'Tax Exclusive'
+                                                            ? '+${_formatPrice(_calculatedTax!)}'
+                                                            : '-${_formatPrice(_calculatedTax!)}'))
+                                                    : '',
+                                                style: TextStyle(
+                                                  color: AppTheme.darkPrimary,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                textAlign: TextAlign.end,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
                                           ],
@@ -1205,28 +1412,78 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                         const SizedBox(height: 12),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment: CrossAxisAlignment.center,
                                           children: [
                                             Text(
                                               'Total:',
                                               style: TextStyle(
                                                 color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                                                fontSize: 18,
+                                                fontSize: 15,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
-                                            Text(
-                                              _calculatedTotal != null
-                                                  ? _formatPrice(_calculatedTotal!)
-                                                  : '',
-                                              style: TextStyle(
-                                                color: AppTheme.darkPrimary,
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
+                                            Flexible(
+                                              child: Text(
+                                                _calculatedTotal != null
+                                                    ? _formatPrice(_calculatedTotal!)
+                                                    : '',
+                                                style: TextStyle(
+                                                  color: AppTheme.darkPrimary,
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                textAlign: TextAlign.end,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
                                           ],
                                         ),
                                       ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // Next Button
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: _calculatedTotal == null || _orderItems.isEmpty
+                                          ? null
+                                          : () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => DivisionScreen(
+                                                    event: widget.event,
+                                                    orderItems: _orderItems,
+                                                    paymentMethod: _paymentMethod,
+                                                    taxType: _taxType,
+                                                    discountPercentage: _discountPercentage,
+                                                    isFoodpanda: _isFoodpanda,
+                                                    miscellaneousAmount: _miscellaneousAmount,
+                                                    calculatedTotal: _calculatedTotal,
+                                                    returnToEvents: widget.returnToEvents,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.darkPrimary,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        disabledBackgroundColor: isDark 
+                                            ? AppTheme.darkTextSecondary.withOpacity(0.3)
+                                            : AppTheme.lightTextSecondary.withOpacity(0.3),
+                                      ),
+                                      child: const Text(
+                                        'Next',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1251,12 +1508,34 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
     // Get discount percentage (0 if not set)
     double discountPercent = _discountPercentage ?? 0.0;
     
-    // If no payment method or tax type selected, just show total
-    if (_paymentMethod == null || _taxType == null) {
+    // Get miscellaneous amount (0 if not set)
+    double miscAmount = _miscellaneousAmount ?? 0.0;
+    
+    // Calculate miscellaneous amount per item (divided equally)
+    int itemCount = _orderItems.length;
+    double miscPerItem = itemCount > 0 ? miscAmount / itemCount : 0.0;
+    
+    // If "Normal" payment method or "None" tax type selected, just show normal total with discount
+    if (_paymentMethod == 'Normal' || _taxType == 'None') {
       double subtotal = 0.0;
       for (var orderItem in _orderItems) {
-        double itemPrice = (orderItem['total_price'] as num).toDouble();
-        // Apply discount if set
+        // Add miscellaneous amount per item to base price (behind the scenes)
+        double itemPrice = (orderItem['total_price'] as num).toDouble() + miscPerItem;
+        // Apply discount if set (normal discount calculation, no foodpanda logic)
+        if (discountPercent > 0) {
+          itemPrice = itemPrice * (1 - discountPercent / 100);
+        }
+        subtotal += itemPrice;
+      }
+      tax = -1; // Special value to show "-"
+      total = subtotal;
+    } else if (_paymentMethod == null || _taxType == null) {
+      // If no payment method or tax type selected, just show total
+      double subtotal = 0.0;
+      for (var orderItem in _orderItems) {
+        // Add miscellaneous amount per item to base price (behind the scenes)
+        double itemPrice = (orderItem['total_price'] as num).toDouble() + miscPerItem;
+        // Apply discount if set (normal discount calculation, no foodpanda logic)
         if (discountPercent > 0) {
           itemPrice = itemPrice * (1 - discountPercent / 100);
         }
@@ -1271,11 +1550,12 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       double totalAfterDiscount = 0.0;
       
       for (var orderItem in _orderItems) {
-        double itemPrice = (orderItem['total_price'] as num).toDouble();
+        // Add miscellaneous amount per item to base price (behind the scenes)
+        double itemPrice = (orderItem['total_price'] as num).toDouble() + miscPerItem;
         double itemTax = itemPrice * (16.0 / 100);
         double itemAfterTax = itemPrice + itemTax;
         
-        // Apply discount on after-tax price (unless foodpanda)
+        // Apply discount on after-tax price (only use foodpanda logic if checkbox is checked)
         if (_isFoodpanda) {
           // Foodpanda: discount on base price, tax on original price
           double itemAfterDiscount = itemPrice * (1 - discountPercent / 100);
@@ -1297,7 +1577,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       // Cash + Tax Inclusive: Show "Included" and just give item total
       double subtotal = 0.0;
       for (var orderItem in _orderItems) {
-        double itemPrice = (orderItem['total_price'] as num).toDouble();
+        // Add miscellaneous amount per item to base price (behind the scenes)
+        double itemPrice = (orderItem['total_price'] as num).toDouble() + miscPerItem;
         // Apply discount if set
         if (discountPercent > 0) {
           itemPrice = itemPrice * (1 - discountPercent / 100);
@@ -1315,11 +1596,12 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       double totalAfterDiscount = 0.0;
       
       for (var orderItem in _orderItems) {
-        double itemPrice = (orderItem['total_price'] as num).toDouble();
+        // Add miscellaneous amount per item to base price (behind the scenes)
+        double itemPrice = (orderItem['total_price'] as num).toDouble() + miscPerItem;
         double itemTax = itemPrice * (5.0 / 100);
         double itemAfterTax = itemPrice + itemTax;
         
-        // Apply discount on after-tax price (unless foodpanda)
+        // Apply discount on after-tax price (only use foodpanda logic if checkbox is checked)
         if (_isFoodpanda) {
           // Foodpanda: discount on base price, tax on original price
           double itemAfterDiscount = itemPrice * (1 - discountPercent / 100);
@@ -1344,11 +1626,12 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       double totalAfterDiscount = 0.0;
       
       for (var orderItem in _orderItems) {
-        double itemPrice = (orderItem['total_price'] as num).toDouble();
+        // Add miscellaneous amount per item to base price (behind the scenes)
+        double itemPrice = (orderItem['total_price'] as num).toDouble() + miscPerItem;
         double itemTax = itemPrice * (5.0 / 100);
         double itemAfterTax = itemPrice - itemTax; // Tax inclusive: subtract tax
         
-        // Apply discount on after-tax price (unless foodpanda)
+        // Apply discount on after-tax price (only use foodpanda logic if checkbox is checked)
         if (_isFoodpanda) {
           // Foodpanda: discount on base price, tax on original price
           double itemAfterDiscount = itemPrice * (1 - discountPercent / 100);
@@ -1387,19 +1670,6 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
     final totalPrice = (orderItem['total_price'] as num).toDouble();
     final addOns = orderItem['addons'] as List<Map<String, dynamic>>? ?? [];
     
-    // Build subtitle text with variant and add-ons info
-    String subtitle = '';
-    if (variantName != null) {
-      subtitle = 'Variant: $variantName';
-    }
-    if (addOns.isNotEmpty) {
-      if (subtitle.isNotEmpty) subtitle += ' • ';
-      subtitle += 'Add-ons: ${addOns.map((a) => '${a['addon_name']} x${a['quantity']}').join(', ')}';
-    }
-    if (subtitle.isEmpty) {
-      subtitle = 'Base item';
-    }
-    
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -1415,41 +1685,125 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 12,
+          horizontal: 10,
+          vertical: 8,
         ),
         title: Text(
           itemName,
           style: TextStyle(
             color: isDark ? AppTheme.darkText : AppTheme.lightText,
             fontWeight: FontWeight.w500,
-            fontSize: 16,
+            fontSize: 13,
           ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(
-            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-            fontSize: 12,
-          ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (variantName != null) ...[
+              const SizedBox(height: 3),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Variant: ',
+                    style: TextStyle(
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      fontSize: 10,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      variantName,
+                      style: TextStyle(
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        fontSize: 10,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (addOns.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              ...addOns.take(2).map((addOn) => Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '• ',
+                      style: TextStyle(
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        fontSize: 10,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${addOn['addon_name']} x${addOn['quantity']}',
+                        style: TextStyle(
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                          fontSize: 10,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              )).toList(),
+              if (addOns.length > 2)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    '+ ${addOns.length - 2} more',
+                    style: TextStyle(
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+            ],
+            if (variantName == null && addOns.isEmpty) ...[
+              const SizedBox(height: 3),
+              Text(
+                'Base item',
+                style: TextStyle(
+                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               '${quantity}x',
               style: TextStyle(
                 color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                fontSize: 14,
+                fontSize: 12,
               ),
             ),
-            Text(
-              _formatPrice(totalPrice),
-              style: TextStyle(
-                color: AppTheme.darkPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+            const SizedBox(height: 2),
+            Flexible(
+              child: Text(
+                _formatPrice(totalPrice),
+                style: TextStyle(
+                  color: AppTheme.darkPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
               ),
             ),
           ],
@@ -1569,9 +1923,10 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: Text(
@@ -1579,18 +1934,28 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                 style: TextStyle(
                   color: isDark ? AppTheme.darkText : AppTheme.lightText,
                   fontWeight: FontWeight.w500,
-                  fontSize: 16,
+                  fontSize: 15,
                 ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
               ),
             ),
-            TextButton(
-              onPressed: onEditPrice,
-              child: Text(
-                _EventItemsScreenState.formatPrice(price),
-                style: TextStyle(
-                  color: AppTheme.darkPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+            Flexible(
+              child: TextButton(
+                onPressed: onEditPrice,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  _EventItemsScreenState.formatPrice(price),
+                  style: TextStyle(
+                    color: AppTheme.darkPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1623,7 +1988,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1716,16 +2081,20 @@ class _VariantsDialogState extends State<_VariantsDialog> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(12.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Variants for ${widget.item.name}',
-                    style: TextStyle(
-                      color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 20,
+                  Flexible(
+                    child: Text(
+                      'Variants for ${widget.item.name}',
+                      style: TextStyle(
+                        color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                   IconButton(
@@ -1741,7 +2110,7 @@ class _VariantsDialogState extends State<_VariantsDialog> {
             // Variants list
             Expanded(
               child: Container(
-                margin: const EdgeInsets.all(8),
+                                  margin: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: widget.isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                   borderRadius: BorderRadius.circular(12),
@@ -1752,7 +2121,7 @@ class _VariantsDialogState extends State<_VariantsDialog> {
                 child: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(12.0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1761,7 +2130,7 @@ class _VariantsDialogState extends State<_VariantsDialog> {
                             style: TextStyle(
                               color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
                               fontWeight: FontWeight.w600,
-                              fontSize: 18,
+                              fontSize: 16,
                             ),
                           ),
                           IconButton(
@@ -1831,7 +2200,7 @@ class _VariantsDialogState extends State<_VariantsDialog> {
             ),
             // Confirm button
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(16.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -1844,7 +2213,7 @@ class _VariantsDialogState extends State<_VariantsDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                   ElevatedButton(
                     onPressed: () async {
                       // Save selections to database
@@ -1864,7 +2233,7 @@ class _VariantsDialogState extends State<_VariantsDialog> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.darkPrimary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1882,15 +2251,17 @@ class _VariantsDialogState extends State<_VariantsDialog> {
 
   Widget _buildVariantCard(Variant variant) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
       color: widget.isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
       child: ListTile(
-        leading: Radio<int>(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        leading: Radio<int?>(
           value: variant.id!,
           groupValue: selectedVariantId,
           onChanged: (value) {
             setState(() {
-              selectedVariantId = value;
+              // Toggle: if already selected, deselect it
+              selectedVariantId = (selectedVariantId == variant.id) ? null : value;
             });
           },
           activeColor: AppTheme.darkPrimary,
@@ -1900,33 +2271,44 @@ class _VariantsDialogState extends State<_VariantsDialog> {
           style: TextStyle(
             color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
             fontWeight: FontWeight.w500,
+            fontSize: 13,
           ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              _EventItemsScreenState.formatPrice(variant.price),
-              style: TextStyle(
-                color: AppTheme.darkPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
+            Flexible(
+              child: Text(
+                _EventItemsScreenState.formatPrice(variant.price),
+                style: TextStyle(
+                  color: AppTheme.darkPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
               ),
             ),
             IconButton(
               icon: Icon(
                 Icons.edit_outlined,
                 color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                size: 20,
+                size: 18,
               ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
               onPressed: () => _editVariantPrice(variant),
               tooltip: 'Edit Price',
             ),
           ],
         ),
+        isThreeLine: false,
         onTap: () {
           setState(() {
-            selectedVariantId = variant.id;
+            // Toggle: if already selected, deselect it
+            selectedVariantId = (selectedVariantId == variant.id) ? null : variant.id;
           });
         },
       ),
@@ -2292,7 +2674,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                   'Name',
                   style: TextStyle(
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -2327,7 +2709,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                   'Price',
                   style: TextStyle(
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -2375,7 +2757,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                   'Quantity',
                   style: TextStyle(
                     color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -2414,7 +2796,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -2448,7 +2830,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                         'Total:',
                         style: TextStyle(
                           color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -2456,7 +2838,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                         _EventItemsScreenState.formatPrice(currentPrice * quantity),
                         style: TextStyle(
                           color: AppTheme.darkPrimary,
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -2546,16 +2928,20 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(12.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Add-ons for ${widget.item.name}',
-                    style: TextStyle(
-                      color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 20,
+                  Flexible(
+                    child: Text(
+                      'Add-ons for ${widget.item.name}',
+                      style: TextStyle(
+                        color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
                   IconButton(
@@ -2568,15 +2954,15 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                 ],
               ),
             ),
-            // Two sections
+            // Two sections - stacked vertically
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Available section
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.all(8),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Available section
+                    Container(
+                                  margin: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: widget.isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                         borderRadius: BorderRadius.circular(12),
@@ -2585,9 +2971,10 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                         ),
                       ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(12.0),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -2596,7 +2983,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                                   style: TextStyle(
                                     color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
                                     fontWeight: FontWeight.w600,
-                                    fontSize: 18,
+                                    fontSize: 15,
                                   ),
                                 ),
                                 IconButton(
@@ -2608,7 +2995,10 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                               ],
                             ),
                           ),
-                          Expanded(
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: MediaQuery.of(context).size.height * 0.3,
+                            ),
                             child: FutureBuilder<List<AddOn>>(
                               future: _addOnsFuture,
                               builder: (context, snapshot) {
@@ -2630,20 +3020,22 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                                 final availableAddOns = addOns;
                                 
                                 if (availableAddOns.isEmpty) {
-                                  return Center(
+                                  return Padding(
+                                    padding: const EdgeInsets.all(12.0),
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Icon(
                                           Icons.add_circle_outline,
-                                          size: 60,
+                                          size: 48,
                                           color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                                         ),
-                                        const SizedBox(height: 16),
+                                        const SizedBox(height: 12),
                                         Text(
                                           'No add-ons available',
                                           style: TextStyle(
                                             color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            fontSize: 13,
                                           ),
                                         ),
                                       ],
@@ -2652,7 +3044,8 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                                 }
                                 
                                 return ListView.builder(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  shrinkWrap: true,
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
                                   itemCount: availableAddOns.length,
                                   itemBuilder: (context, index) {
                                     final addOn = availableAddOns[index];
@@ -2665,11 +3058,9 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                         ],
                       ),
                     ),
-                  ),
-                  // Added section
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.all(8),
+                    // Added section
+                    Container(
+                                  margin: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: widget.isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
                         borderRadius: BorderRadius.circular(12),
@@ -2678,41 +3069,48 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                         ),
                       ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(12.0),
                             child: Text(
                               'Added',
                               style: TextStyle(
                                 color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
                                 fontWeight: FontWeight.w600,
-                                fontSize: 18,
+                                fontSize: 15,
                               ),
                             ),
                           ),
-                          Expanded(
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: MediaQuery.of(context).size.height * 0.3,
+                            ),
                             child: addedAddOns.isEmpty
-                                ? Center(
+                                ? Padding(
+                                    padding: const EdgeInsets.all(12.0),
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Icon(
                                           Icons.shopping_cart_outlined,
-                                          size: 60,
+                                          size: 48,
                                           color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                                         ),
-                                        const SizedBox(height: 16),
+                                        const SizedBox(height: 12),
                                         Text(
                                           'No add-ons added',
                                           style: TextStyle(
                                             color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                            fontSize: 13,
                                           ),
                                         ),
                                       ],
                                     ),
                                   )
                                 : ListView.builder(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    shrinkWrap: true,
+                                    padding: const EdgeInsets.symmetric(horizontal: 6),
                                     itemCount: addedAddOns.length,
                                     itemBuilder: (context, index) {
                                       final addedAddOn = addedAddOns.values.toList()[index];
@@ -2723,13 +3121,13 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                         ],
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             // Confirm button
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(16.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -2742,7 +3140,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                   ElevatedButton(
                     onPressed: () async {
                       // Save selections to database
@@ -2762,7 +3160,7 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.darkPrimary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -2780,22 +3178,30 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
 
   Widget _buildAvailableAddOnCard(AddOn addOn) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
       color: widget.isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         title: Text(
           addOn.name,
           style: TextStyle(
             color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
             fontWeight: FontWeight.w500,
+            fontSize: 13,
           ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
-        trailing: Text(
-          _EventItemsScreenState.formatPrice(addOn.price),
-          style: TextStyle(
-            color: AppTheme.darkPrimary,
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
+        trailing: Flexible(
+          child: Text(
+            _EventItemsScreenState.formatPrice(addOn.price),
+            style: TextStyle(
+              color: AppTheme.darkPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.end,
           ),
         ),
         onTap: () => _showAddOnQuantityDialog(addOn),
@@ -2806,15 +3212,19 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
   Widget _buildAddedAddOnCard(_AddedAddOn addedAddOn) {
     final totalPrice = addedAddOn.price * addedAddOn.quantity;
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
       color: widget.isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         title: Text(
           addedAddOn.name,
           style: TextStyle(
             color: widget.isDark ? AppTheme.darkText : AppTheme.lightText,
             fontWeight: FontWeight.w500,
+            fontSize: 13,
           ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2823,23 +3233,28 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
               '${addedAddOn.quantity}x ',
               style: TextStyle(
                 color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                fontSize: 14,
+                fontSize: 12,
               ),
             ),
-            Text(
-              _EventItemsScreenState.formatPrice(totalPrice),
-              style: TextStyle(
-                color: AppTheme.darkPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
+            Flexible(
+              child: Text(
+                _EventItemsScreenState.formatPrice(totalPrice),
+                style: TextStyle(
+                  color: AppTheme.darkPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             IconButton(
               icon: Icon(
                 Icons.delete_outline,
                 color: Colors.red,
-                size: 20,
+                size: 18,
               ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
               onPressed: () {
                 // Remove from added
                 setState(() {
@@ -3010,4 +3425,5 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
     priceController.dispose();
   }
 }
+
 

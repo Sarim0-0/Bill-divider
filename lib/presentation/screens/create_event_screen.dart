@@ -17,12 +17,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   final TextEditingController _eventNameController = TextEditingController();
   List<Person> _allPeople = [];
   Set<int> _selectedPeopleIds = {};
+  List<String> _existingEventNames = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadPeople();
+    _loadExistingEventNames();
   }
 
   @override
@@ -37,6 +39,15 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     setState(() {
       _allPeople = people;
       _isLoading = false;
+    });
+  }
+
+  Future<void> _loadExistingEventNames() async {
+    final events = await _dbService.getAllEvents();
+    // Get unique event names (sorted)
+    final uniqueNames = events.map((e) => e.name).toSet().toList()..sort();
+    setState(() {
+      _existingEventNames = uniqueNames;
     });
   }
 
@@ -164,8 +175,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
     try {
       final now = DateTime.now();
+      final eventName = _eventNameController.text.trim();
       final event = Event(
-        name: _eventNameController.text.trim(),
+        name: eventName,
         date: now.toIso8601String().split('T')[0], // YYYY-MM-DD format
       );
 
@@ -174,6 +186,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       // Add selected people to event
       for (final personId in _selectedPeopleIds) {
         await _dbService.addPersonToEvent(eventId, personId);
+      }
+
+      // Check if there's an existing event with the same name and copy its items
+      final existingEvent = await _dbService.getMostRecentEventByName(eventName, excludeEventId: eventId);
+      if (existingEvent != null) {
+        // Copy all items, variants, and add-ons from the existing event
+        await _dbService.copyEventItems(
+          fromEventId: existingEvent.id!,
+          toEventId: eventId,
+        );
       }
 
       if (mounted) {
@@ -226,41 +248,98 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       ),
       body: Column(
         children: [
-          // Event name input
+          // Event name section
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _eventNameController,
-              autofocus: true,
-              style: TextStyle(
-                color: isDark ? AppTheme.darkText : AppTheme.lightText,
-                fontSize: 18,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Event Name',
-                labelStyle: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                ),
-                hintText: 'Enter event name',
-                hintStyle: TextStyle(
-                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Dropdown for existing event names
+                if (_existingEventNames.isNotEmpty) ...[
+                  Text(
+                    'Select from existing events:',
+                    style: TextStyle(
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: null,
+                    decoration: InputDecoration(
+                      hintText: 'Choose an existing event name',
+                      hintStyle: TextStyle(
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: AppTheme.darkPrimary,
+                          width: 2,
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                    ),
+                    dropdownColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                    style: TextStyle(
+                      color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                    ),
+                    items: _existingEventNames.map((name) {
+                      return DropdownMenuItem<String>(
+                        value: name,
+                        child: Text(name),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        _eventNameController.text = value;
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                // Event name input
+                TextField(
+                  controller: _eventNameController,
+                  autofocus: true,
+                  style: TextStyle(
+                    color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                    fontSize: 18,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Event Name',
+                    labelStyle: TextStyle(
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                    ),
+                    hintText: 'Enter event name',
+                    hintStyle: TextStyle(
+                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: AppTheme.darkPrimary,
+                        width: 2,
+                      ),
+                    ),
+                    filled: true,
+                    fillColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: AppTheme.darkPrimary,
-                    width: 2,
-                  ),
-                ),
-                filled: true,
-                fillColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-              ),
+              ],
             ),
           ),
           // People list header
@@ -359,8 +438,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                 style: TextStyle(
                                   color: isDark ? AppTheme.darkText : AppTheme.lightText,
                                   fontWeight: FontWeight.w500,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                 ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                               activeColor: AppTheme.darkPrimary,
                               checkColor: Colors.white,
@@ -384,43 +465,91 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           ],
         ),
         child: SafeArea(
-          child: Row(
-            children: [
-              // Add Person button (bottom left)
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _addPerson,
-                  icon: const Icon(Icons.person_add_rounded),
-                  label: const Text('Add Person'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.darkPrimary,
-                    side: BorderSide(color: AppTheme.darkPrimary),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 600;
+              if (isMobile) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Add Person button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _addPerson,
+                        icon: const Icon(Icons.person_add_rounded),
+                        label: const Text('Add Person'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.darkPrimary,
+                          side: BorderSide(color: AppTheme.darkPrimary),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Create Event button (bottom right)
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: _createEvent,
+                    const SizedBox(height: 12),
+                    // Create Event button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _createEvent,
                   icon: const Icon(Icons.check_rounded),
                   label: const Text('Create Event'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.darkSecondary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.darkSecondary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-            ],
+                  ],
+                );
+              } else {
+                return Row(
+                  children: [
+                    // Add Person button (bottom left)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _addPerson,
+                        icon: const Icon(Icons.person_add_rounded),
+                        label: const Text('Add Person'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.darkPrimary,
+                          side: BorderSide(color: AppTheme.darkPrimary),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Create Event button (bottom right)
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: _createEvent,
+                        icon: const Icon(Icons.check_rounded),
+                        label: const Text('Create Event'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.darkSecondary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+            },
           ),
         ),
       ),

@@ -46,37 +46,78 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: Center(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        GlowingButton(
-                          label: 'Add People',
-                          icon: Icons.person_add_rounded,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AddPeopleScreen(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // On mobile, stack buttons vertically; on larger screens, show side by side
+                        final isMobile = constraints.maxWidth < 600;
+                        if (isMobile) {
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              GlowingButton(
+                                label: 'Add People',
+                                icon: Icons.person_add_rounded,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AddPeopleScreen(),
+                                    ),
+                                  );
+                                },
+                                glowColor: const Color(0xFF6366F1), // Indigo
                               ),
-                            );
-                          },
-                          glowColor: const Color(0xFF6366F1), // Indigo
-                        ),
-                        GlowingButton(
-                          label: 'Add Event',
-                          icon: Icons.event_rounded,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AddEventScreen(),
+                              const SizedBox(height: 24),
+                              GlowingButton(
+                                label: 'Add Event',
+                                icon: Icons.event_rounded,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AddEventScreen(),
+                                    ),
+                                  );
+                                },
+                                glowColor: const Color(0xFF8B5CF6), // Purple
                               ),
-                            );
-                          },
-                          glowColor: const Color(0xFF8B5CF6), // Purple
-                        ),
-                      ],
+                            ],
+                          );
+                        } else {
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              GlowingButton(
+                                label: 'Add People',
+                                icon: Icons.person_add_rounded,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AddPeopleScreen(),
+                                    ),
+                                  );
+                                },
+                                glowColor: const Color(0xFF6366F1), // Indigo
+                              ),
+                              GlowingButton(
+                                label: 'Add Event',
+                                icon: Icons.event_rounded,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const AddEventScreen(),
+                                    ),
+                                  );
+                                },
+                                glowColor: const Color(0xFF8B5CF6), // Purple
+                              ),
+                            ],
+                          );
+                        }
+                      },
                     ),
                   ),
                 ),
