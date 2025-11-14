@@ -27,16 +27,27 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
   // Payment and tax settings (nullable to allow no selection)
   String? _paymentMethod; // 'Cash' or 'Card' or null
   String? _taxType; // 'Tax Exclusive' or 'Tax Inclusive' or null
+  double? _discountPercentage; // Discount percentage
+  bool _isFoodpanda = false; // Foodpanda radio button state
   
   // Calculated values
   double? _calculatedTax;
   double? _calculatedTotal;
+  
+  // Text controller for discount input
+  final TextEditingController _discountController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadItems();
     _loadPaymentSettings();
+  }
+  
+  @override
+  void dispose() {
+    _discountController.dispose();
+    super.dispose();
   }
   
   Future<void> _loadPaymentSettings() async {
@@ -47,6 +58,13 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
         _taxType = settings['tax_type'] as String?;
         _calculatedTax = settings['calculated_tax'] as double?;
         _calculatedTotal = settings['calculated_total'] as double?;
+        _discountPercentage = settings['discount_percentage'] as double?;
+        _isFoodpanda = (settings['is_foodpanda'] as int? ?? 0) == 1;
+        
+        // Set discount controller text if discount exists
+        if (_discountPercentage != null) {
+          _discountController.text = _discountPercentage!.toStringAsFixed(0);
+        }
       });
     }
   }
@@ -60,6 +78,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       taxType: _taxType, // Current selection (can be null)
       calculatedTax: saveCalculated ? _calculatedTax : null, // null means preserve existing
       calculatedTotal: saveCalculated ? _calculatedTotal : null, // null means preserve existing
+      discountPercentage: _discountPercentage,
+      isFoodpanda: _isFoodpanda,
     );
   }
 
@@ -950,7 +970,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                         groupValue: _paymentMethod,
                                         onChanged: (value) {
                                           setState(() {
-                                            _paymentMethod = value;
+                                            // Toggle: if already selected, deselect it
+                                            _paymentMethod = (_paymentMethod == 'Cash') ? null : value;
                                             // Don't clear calculated values when changing selection
                                             // They will be recalculated when Calculate is clicked
                                           });
@@ -970,7 +991,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                         groupValue: _paymentMethod,
                                         onChanged: (value) {
                                           setState(() {
-                                            _paymentMethod = value;
+                                            // Toggle: if already selected, deselect it
+                                            _paymentMethod = (_paymentMethod == 'Card') ? null : value;
                                             // Don't clear calculated values when changing selection
                                             // They will be recalculated when Calculate is clicked
                                           });
@@ -1004,7 +1026,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                         groupValue: _taxType,
                                         onChanged: (value) {
                                           setState(() {
-                                            _taxType = value;
+                                            // Toggle: if already selected, deselect it
+                                            _taxType = (_taxType == 'Tax Exclusive') ? null : value;
                                             // Don't clear calculated values when changing selection
                                             // They will be recalculated when Calculate is clicked
                                           });
@@ -1024,7 +1047,8 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                         groupValue: _taxType,
                                         onChanged: (value) {
                                           setState(() {
-                                            _taxType = value;
+                                            // Toggle: if already selected, deselect it
+                                            _taxType = (_taxType == 'Tax Inclusive') ? null : value;
                                             // Don't clear calculated values when changing selection
                                             // They will be recalculated when Calculate is clicked
                                           });
@@ -1034,6 +1058,79 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                                       ),
                                       Text(
                                         'Tax Inclusive',
+                                        style: TextStyle(
+                                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // Discount Section
+                                  Text(
+                                    'Discount',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _discountController,
+                                          keyboardType: TextInputType.number,
+                                          style: TextStyle(
+                                            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                                          ),
+                                          decoration: InputDecoration(
+                                            hintText: '0',
+                                            suffixText: '%',
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: BorderSide(
+                                                color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+                                              ),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                              borderSide: BorderSide(
+                                                color: AppTheme.darkPrimary,
+                                                width: 2,
+                                              ),
+                                            ),
+                                            filled: true,
+                                            fillColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+                                          ),
+                                          onChanged: (value) {
+                                            final discount = double.tryParse(value);
+                                            setState(() {
+                                              _discountPercentage = discount;
+                                              _calculatedTax = null;
+                                              _calculatedTotal = null;
+                                            });
+                                            _savePaymentSettings();
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Radio<bool>(
+                                        value: true,
+                                        groupValue: _isFoodpanda ? true : null,
+                                        onChanged: (value) {
+                                          setState(() {
+                                            // Toggle: if already selected, deselect it
+                                            _isFoodpanda = !_isFoodpanda;
+                                            _calculatedTax = null;
+                                            _calculatedTotal = null;
+                                          });
+                                          _savePaymentSettings();
+                                        },
+                                        activeColor: AppTheme.darkPrimary,
+                                      ),
+                                      Text(
+                                        'foodpanda',
                                         style: TextStyle(
                                           color: isDark ? AppTheme.darkText : AppTheme.lightText,
                                         ),
@@ -1151,68 +1248,123 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
     double tax;
     double total;
     
+    // Get discount percentage (0 if not set)
+    double discountPercent = _discountPercentage ?? 0.0;
+    
     // If no payment method or tax type selected, just show total
     if (_paymentMethod == null || _taxType == null) {
       double subtotal = 0.0;
       for (var orderItem in _orderItems) {
-        subtotal += (orderItem['total_price'] as num).toDouble();
+        double itemPrice = (orderItem['total_price'] as num).toDouble();
+        // Apply discount if set
+        if (discountPercent > 0) {
+          itemPrice = itemPrice * (1 - discountPercent / 100);
+        }
+        subtotal += itemPrice;
       }
       tax = -1; // Special value to show "-"
       total = subtotal;
     } else if (_paymentMethod == 'Cash' && _taxType == 'Tax Exclusive') {
-      // Cash + Tax Exclusive: Calculate 16% tax on each item and add it
+      // Cash + Tax Exclusive: Calculate 16% tax on each item, then apply discount
       double subtotal = 0.0;
       double totalTax = 0.0;
+      double totalAfterDiscount = 0.0;
       
       for (var orderItem in _orderItems) {
         double itemPrice = (orderItem['total_price'] as num).toDouble();
         double itemTax = itemPrice * (16.0 / 100);
+        double itemAfterTax = itemPrice + itemTax;
+        
+        // Apply discount on after-tax price (unless foodpanda)
+        if (_isFoodpanda) {
+          // Foodpanda: discount on base price, tax on original price
+          double itemAfterDiscount = itemPrice * (1 - discountPercent / 100);
+          itemAfterTax = itemAfterDiscount + itemTax; // Tax on original, discount on base
+        } else {
+          // Normal: discount on after-tax price
+          itemAfterTax = itemAfterTax * (1 - discountPercent / 100);
+        }
+        
         subtotal += itemPrice;
         totalTax += itemTax;
+        totalAfterDiscount += itemAfterTax;
       }
       
       tax = totalTax;
-      total = subtotal + totalTax;
+      total = totalAfterDiscount;
       
     } else if (_paymentMethod == 'Cash' && _taxType == 'Tax Inclusive') {
       // Cash + Tax Inclusive: Show "Included" and just give item total
       double subtotal = 0.0;
       for (var orderItem in _orderItems) {
-        subtotal += (orderItem['total_price'] as num).toDouble();
+        double itemPrice = (orderItem['total_price'] as num).toDouble();
+        // Apply discount if set
+        if (discountPercent > 0) {
+          itemPrice = itemPrice * (1 - discountPercent / 100);
+        }
+        subtotal += itemPrice;
       }
       
       tax = -1; // Special value to show "Included"
       total = subtotal;
       
     } else if (_paymentMethod == 'Card' && _taxType == 'Tax Exclusive') {
-      // Card + Tax Exclusive: Calculate 5% tax on each item and add it
+      // Card + Tax Exclusive: Calculate 5% tax on each item, then apply discount
       double subtotal = 0.0;
       double totalTax = 0.0;
+      double totalAfterDiscount = 0.0;
       
       for (var orderItem in _orderItems) {
         double itemPrice = (orderItem['total_price'] as num).toDouble();
         double itemTax = itemPrice * (5.0 / 100);
+        double itemAfterTax = itemPrice + itemTax;
+        
+        // Apply discount on after-tax price (unless foodpanda)
+        if (_isFoodpanda) {
+          // Foodpanda: discount on base price, tax on original price
+          double itemAfterDiscount = itemPrice * (1 - discountPercent / 100);
+          itemAfterTax = itemAfterDiscount + itemTax; // Tax on original, discount on base
+        } else {
+          // Normal: discount on after-tax price
+          itemAfterTax = itemAfterTax * (1 - discountPercent / 100);
+        }
+        
         subtotal += itemPrice;
         totalTax += itemTax;
+        totalAfterDiscount += itemAfterTax;
       }
       
       tax = totalTax;
-      total = subtotal + totalTax;
+      total = totalAfterDiscount;
       
     } else if (_paymentMethod == 'Card' && _taxType == 'Tax Inclusive') {
-      // Card + Tax Inclusive: Calculate 5% tax on each item and subtract it
+      // Card + Tax Inclusive: Calculate 5% tax on each item and subtract it, then apply discount
       double subtotal = 0.0;
       double totalTax = 0.0;
+      double totalAfterDiscount = 0.0;
       
       for (var orderItem in _orderItems) {
         double itemPrice = (orderItem['total_price'] as num).toDouble();
         double itemTax = itemPrice * (5.0 / 100);
+        double itemAfterTax = itemPrice - itemTax; // Tax inclusive: subtract tax
+        
+        // Apply discount on after-tax price (unless foodpanda)
+        if (_isFoodpanda) {
+          // Foodpanda: discount on base price, tax on original price
+          double itemAfterDiscount = itemPrice * (1 - discountPercent / 100);
+          itemAfterTax = itemAfterDiscount + itemTax; // Tax on original, discount on base
+        } else {
+          // Normal: discount on after-tax price
+          itemAfterTax = itemAfterTax * (1 - discountPercent / 100);
+        }
+        
         subtotal += itemPrice;
         totalTax += itemTax;
+        totalAfterDiscount += itemAfterTax;
       }
       
       tax = totalTax;
-      total = subtotal - totalTax;
+      total = totalAfterDiscount;
     } else {
       // Fallback (shouldn't happen)
       tax = 0;

@@ -23,7 +23,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'bill_divider.db');
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -161,6 +161,15 @@ class DatabaseService {
         await db.execute('ALTER TABLE event_payment_settings ADD COLUMN calculated_total REAL');
       } catch (_) {}
     }
+    if (oldVersion < 9) {
+      // Add discount and foodpanda columns to event_payment_settings
+      try {
+        await db.execute('ALTER TABLE event_payment_settings ADD COLUMN discount_percentage REAL');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE event_payment_settings ADD COLUMN is_foodpanda INTEGER DEFAULT 0');
+      } catch (_) {}
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -288,6 +297,8 @@ class DatabaseService {
         tax_type TEXT,
         calculated_tax REAL,
         calculated_total REAL,
+        discount_percentage REAL,
+        is_foodpanda INTEGER DEFAULT 0,
         FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
       )
     ''');
@@ -820,6 +831,8 @@ class DatabaseService {
     String? taxType,
     double? calculatedTax,
     double? calculatedTotal,
+    double? discountPercentage,
+    bool? isFoodpanda,
   }) async {
     final db = await database;
     final existing = await getEventPaymentSettings(eventId);
@@ -830,6 +843,8 @@ class DatabaseService {
       'tax_type': taxType ?? existing?['tax_type'],
       'calculated_tax': calculatedTax ?? existing?['calculated_tax'],
       'calculated_total': calculatedTotal ?? existing?['calculated_total'],
+      'discount_percentage': discountPercentage ?? existing?['discount_percentage'],
+      'is_foodpanda': isFoodpanda != null ? (isFoodpanda ? 1 : 0) : (existing?['is_foodpanda'] ?? 0),
     };
 
     await db.insert(
