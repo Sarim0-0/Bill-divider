@@ -23,7 +23,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'bill_divider.db');
     return await openDatabase(
       path,
-      version: 6,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -114,6 +114,53 @@ class DatabaseService {
         )
       ''');
     }
+    if (oldVersion < 7) {
+      // Add event_order_items table to store items added to order
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS event_order_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_id INTEGER NOT NULL,
+          item_id INTEGER NOT NULL,
+          variant_id INTEGER,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          total_price REAL NOT NULL,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+          FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+          FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE SET NULL
+        )
+      ''');
+      // Add event_order_item_addons table to store add-ons for order items
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS event_order_item_addons (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_item_id INTEGER NOT NULL,
+          addon_id INTEGER NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          FOREIGN KEY (order_item_id) REFERENCES event_order_items(id) ON DELETE CASCADE,
+          FOREIGN KEY (addon_id) REFERENCES add_ons(id) ON DELETE CASCADE
+        )
+      ''');
+    }
+    if (oldVersion < 8) {
+      // Add event_payment_settings table and calculated columns if needed
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS event_payment_settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_id INTEGER NOT NULL UNIQUE,
+          payment_method TEXT,
+          tax_type TEXT,
+          calculated_tax REAL,
+          calculated_total REAL,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        )
+      ''');
+      try {
+        await db.execute('ALTER TABLE event_payment_settings ADD COLUMN calculated_tax REAL');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE event_payment_settings ADD COLUMN calculated_total REAL');
+      } catch (_) {}
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -202,6 +249,46 @@ class DatabaseService {
         FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
         FOREIGN KEY (addon_id) REFERENCES add_ons(id) ON DELETE CASCADE,
         UNIQUE(item_id, addon_id)
+      )
+    ''');
+
+    // Create event_order_items table to store items added to order
+    await db.execute('''
+      CREATE TABLE event_order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
+        variant_id INTEGER,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        total_price REAL NOT NULL,
+        FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+        FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
+        FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE SET NULL
+      )
+    ''');
+
+    // Create event_order_item_addons table to store add-ons for order items
+    await db.execute('''
+      CREATE TABLE event_order_item_addons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_item_id INTEGER NOT NULL,
+        addon_id INTEGER NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (order_item_id) REFERENCES event_order_items(id) ON DELETE CASCADE,
+        FOREIGN KEY (addon_id) REFERENCES add_ons(id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Create event_payment_settings table to store payment method and tax type
+    await db.execute('''
+      CREATE TABLE event_payment_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id INTEGER NOT NULL UNIQUE,
+        payment_method TEXT,
+        tax_type TEXT,
+        calculated_tax REAL,
+        calculated_total REAL,
+        FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
       )
     ''');
   }
@@ -644,6 +731,124 @@ class DatabaseService {
       INNER JOIN add_ons ao ON ias.addon_id = ao.id
       WHERE ias.item_id = ?
     ''', [itemId]);
+  }
+
+  // ==================== Order Items Operations ====================
+
+  /// Save an order item with variant, add-ons, quantity, and total price
+  Future<int> insertOrderItem({
+    required int eventId,
+    required int itemId,
+    int? variantId,
+    required int quantity,
+    required double totalPrice,
+    List<Map<String, int>>? addOns,
+  }) async {
+    final db = await database;
+    final orderItemId = await db.insert(
+      'event_order_items',
+      {
+        'event_id': eventId,
+        'item_id': itemId,
+        'variant_id': variantId,
+        'quantity': quantity,
+        'total_price': totalPrice,
+      },
+    );
+
+    if (addOns != null && addOns.isNotEmpty) {
+      for (var addOn in addOns) {
+        await db.insert(
+          'event_order_item_addons',
+          {
+            'order_item_id': orderItemId,
+            'addon_id': addOn['addon_id']!,
+            'quantity': addOn['quantity']!,
+          },
+        );
+      }
+    }
+
+    return orderItemId;
+  }
+
+  /// Get all order items for an event with details
+  Future<List<Map<String, dynamic>>> getOrderItemsByEvent(int eventId) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT 
+        eoi.*,
+        i.name as item_name,
+        i.price as base_price,
+        v.name as variant_name,
+        v.price as variant_price
+      FROM event_order_items eoi
+      INNER JOIN items i ON eoi.item_id = i.id
+      LEFT JOIN variants v ON eoi.variant_id = v.id
+      WHERE eoi.event_id = ?
+      ORDER BY eoi.id DESC
+    ''', [eventId]);
+  }
+
+  /// Get all add-ons for an order item with details
+  Future<List<Map<String, dynamic>>> getOrderItemAddOns(int orderItemId) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT eoia.*, ao.name as addon_name, ao.price as addon_price
+      FROM event_order_item_addons eoia
+      INNER JOIN add_ons ao ON eoia.addon_id = ao.id
+      WHERE eoia.order_item_id = ?
+    ''', [orderItemId]);
+  }
+
+  /// Delete an order item (add-ons are deleted via cascade)
+  Future<void> deleteOrderItem(int orderItemId) async {
+    final db = await database;
+    await db.delete(
+      'event_order_items',
+      where: 'id = ?',
+      whereArgs: [orderItemId],
+    );
+  }
+
+  // ==================== Payment Settings Operations ====================
+
+  /// Save or update payment settings for an event
+  Future<void> saveEventPaymentSettings({
+    required int eventId,
+    String? paymentMethod,
+    String? taxType,
+    double? calculatedTax,
+    double? calculatedTotal,
+  }) async {
+    final db = await database;
+    final existing = await getEventPaymentSettings(eventId);
+
+    final data = {
+      'event_id': eventId,
+      'payment_method': paymentMethod ?? existing?['payment_method'],
+      'tax_type': taxType ?? existing?['tax_type'],
+      'calculated_tax': calculatedTax ?? existing?['calculated_tax'],
+      'calculated_total': calculatedTotal ?? existing?['calculated_total'],
+    };
+
+    await db.insert(
+      'event_payment_settings',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get payment settings for an event
+  Future<Map<String, dynamic>?> getEventPaymentSettings(int eventId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'event_payment_settings',
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+    );
+    if (maps.isEmpty) return null;
+    return maps.first;
   }
 
   Future<void> closeDatabase() async {
