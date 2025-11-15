@@ -117,34 +117,68 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           );
                         } else {
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              GlowingButton(
-                                label: 'Add People',
-                                icon: Icons.person_add_rounded,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const AddPeopleScreen(),
-                                    ),
-                                  );
-                                },
-                                glowColor: const Color(0xFF6366F1), // Indigo
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  GlowingButton(
+                                    label: 'Add People',
+                                    icon: Icons.person_add_rounded,
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const AddPeopleScreen(),
+                                        ),
+                                      );
+                                    },
+                                    glowColor: const Color(0xFF6366F1), // Indigo
+                                  ),
+                                  GlowingButton(
+                                    label: 'Add Event',
+                                    icon: Icons.event_rounded,
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const AddEventScreen(),
+                                        ),
+                                      );
+                                    },
+                                    glowColor: const Color(0xFF8B5CF6), // Purple
+                                  ),
+                                ],
                               ),
-                              GlowingButton(
-                                label: 'Add Event',
-                                icon: Icons.event_rounded,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const AddEventScreen(),
+                              const SizedBox(height: 24),
+                              // Clear All Data button
+                              Container(
+                                width: 300,
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _showClearDataDialog(context, isDark),
+                                  icon: Icon(
+                                    Icons.delete_sweep_rounded,
+                                    color: Colors.red.withOpacity(0.8),
+                                  ),
+                                  label: Text(
+                                    'Clear All Data',
+                                    style: TextStyle(
+                                      color: Colors.red.withOpacity(0.8),
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                  );
-                                },
-                                glowColor: const Color(0xFF8B5CF6), // Purple
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    side: BorderSide(
+                                      color: Colors.red.withOpacity(0.5),
+                                      width: 1.5,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           );
