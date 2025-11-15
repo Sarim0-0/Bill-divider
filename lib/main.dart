@@ -20,8 +20,8 @@ void main() async {
   final dbService = DatabaseService();
   await dbService.database; // Initialize database on app start
   
-  // Clear all database entries for fresh start
-  await dbService.clearAllData();
+  // Note: Database is automatically created on first launch
+  // Data will persist between app restarts
   
   // Initialize theme manager (it loads theme automatically in constructor)
   final themeManager = ThemeManager();

@@ -8,7 +8,8 @@ plugins {
 android {
     namespace = "com.example.bill_divider"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // NDK is optional for apps without native code
+    // ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
