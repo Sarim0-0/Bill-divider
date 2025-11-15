@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/theme_manager.dart';
+import '../../core/theme/app_theme.dart';
+import '../../services/database_service.dart';
 import '../widgets/glowing_button.dart';
 import 'add_people_screen.dart';
 import 'add_event_screen.dart';
@@ -82,6 +84,36 @@ class _HomeScreenState extends State<HomeScreen> {
                                 },
                                 glowColor: const Color(0xFF8B5CF6), // Purple
                               ),
+                              const SizedBox(height: 24),
+                              // Clear All Data button
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _showClearDataDialog(context, isDark),
+                                  icon: Icon(
+                                    Icons.delete_sweep_rounded,
+                                    color: Colors.red.withOpacity(0.8),
+                                  ),
+                                  label: Text(
+                                    'Clear All Data',
+                                    style: TextStyle(
+                                      color: Colors.red.withOpacity(0.8),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    side: BorderSide(
+                                      color: Colors.red.withOpacity(0.5),
+                                      width: 1.5,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           );
                         } else {
@@ -125,6 +157,78 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showClearDataDialog(BuildContext context, bool isDark) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Clear All Data',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete ALL data? This will remove all people, events, items, variants, and add-ons. This action cannot be undone.',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              try {
+                final dbService = DatabaseService();
+                await dbService.clearAllData();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('All data cleared successfully'),
+                      backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error clearing data: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            },
+            child: Text(
+              'Clear All',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

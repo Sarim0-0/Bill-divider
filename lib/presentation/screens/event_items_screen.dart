@@ -676,6 +676,88 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
           ),
             actions: [
               TextButton(
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      title: Text(
+                        'Delete Item',
+                        style: TextStyle(
+                          color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      content: Text(
+                        'Are you sure you want to delete "${item.name}"? This will also delete all its variants and add-ons.',
+                        style: TextStyle(
+                          color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: Text(
+                            'Delete',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  if (confirm == true) {
+                    try {
+                      await _dbService.deleteItem(item.id!);
+                      Navigator.pop(context); // Close item details dialog
+                      _loadItems(); // Reload items list
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${item.name} deleted'),
+                            backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                            behavior: SnackBarBehavior.floating,
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error deleting item: ${e.toString()}'),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+                child: Text(
+                  'Delete',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: Text(
                   'Cancel',
@@ -2302,6 +2384,17 @@ class _VariantsDialogState extends State<_VariantsDialog> {
               onPressed: () => _editVariantPrice(variant),
               tooltip: 'Edit Price',
             ),
+            IconButton(
+              icon: Icon(
+                Icons.delete_outline,
+                color: Colors.red.withOpacity(0.7),
+                size: 18,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () => _deleteVariant(variant),
+              tooltip: 'Delete Variant',
+            ),
           ],
         ),
         isThreeLine: false,
@@ -2472,6 +2565,82 @@ class _VariantsDialogState extends State<_VariantsDialog> {
     priceController.dispose();
   }
 
+  Future<void> _deleteVariant(Variant variant) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Delete Variant',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${variant.name}"?',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await widget.dbService.deleteVariant(variant.id!);
+        _refreshVariants();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${variant.name} deleted'),
+              backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting variant: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _editVariantPrice(Variant variant) async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -2638,6 +2807,82 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
     setState(() {
       _addOnsFuture = widget.dbService.getAddOnsByItem(widget.item.id!);
     });
+  }
+
+  Future<void> _deleteAddOn(AddOn addOn) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Delete Add-On',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${addOn.name}"?',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await widget.dbService.deleteAddOn(addOn.id!);
+        _refreshAddOns();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${addOn.name} deleted'),
+              backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting add-on: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _showAddOnQuantityDialog(AddOn addOn) async {
@@ -3192,17 +3437,33 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
-        trailing: Flexible(
-          child: Text(
-            _EventItemsScreenState.formatPrice(addOn.price),
-            style: TextStyle(
-              color: AppTheme.darkPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                _EventItemsScreenState.formatPrice(addOn.price),
+                style: TextStyle(
+                  color: AppTheme.darkPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
             ),
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.end,
-          ),
+            IconButton(
+              icon: Icon(
+                Icons.delete_outline,
+                color: Colors.red.withOpacity(0.7),
+                size: 18,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () => _deleteAddOn(addOn),
+              tooltip: 'Delete Add-On',
+            ),
+          ],
         ),
         onTap: () => _showAddOnQuantityDialog(addOn),
       ),
