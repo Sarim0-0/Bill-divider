@@ -221,45 +221,49 @@ class _DivisionScreenState extends State<DivisionScreen> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          content: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.6,
-            ),
-            child: _people.isEmpty
-                ? Text(
-                    'No people in this event',
-                    style: TextStyle(
-                      color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
-                    ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _people.length,
-                    itemBuilder: (context, index) {
-                      final person = _people[index];
-                      final isSelected = selectedIds.contains(person.id);
-                      return CheckboxListTile(
-                        title: Text(
-                          person.name,
-                          style: TextStyle(
-                            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.6,
+              ),
+              child: _people.isEmpty
+                  ? Text(
+                      'No people in this event',
+                      style: TextStyle(
+                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: _people.length,
+                      itemBuilder: (context, index) {
+                        final person = _people[index];
+                        final isSelected = selectedIds.contains(person.id);
+                        return CheckboxListTile(
+                          title: Text(
+                            person.name,
+                            style: TextStyle(
+                              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        value: isSelected,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            if (value == true) {
-                              selectedIds.add(person.id!);
-                            } else {
-                              selectedIds.remove(person.id);
-                            }
-                          });
-                        },
-                        activeColor: AppTheme.darkPrimary,
-                      );
-                    },
-                  ),
+                          value: isSelected,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              if (value == true) {
+                                selectedIds.add(person.id!);
+                              } else {
+                                selectedIds.remove(person.id);
+                              }
+                            });
+                          },
+                          activeColor: AppTheme.darkPrimary,
+                        );
+                      },
+                    ),
+            ),
           ),
           actions: [
             TextButton(

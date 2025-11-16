@@ -194,6 +194,119 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
     }
   }
 
+  Future<void> _editItemPrice(Item item) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final priceController = TextEditingController(text: item.price.toStringAsFixed(2));
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Edit ${item.name} Price',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: TextField(
+          controller: priceController,
+          keyboardType: TextInputType.numberWithOptions(decimal: true),
+          style: TextStyle(
+            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+          ),
+          decoration: InputDecoration(
+            labelText: 'Price',
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: AppTheme.darkPrimary,
+                width: 2,
+              ),
+            ),
+            filled: true,
+            fillColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+            prefixText: 'Rs. ',
+            prefixStyle: TextStyle(
+              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              final priceText = priceController.text.trim();
+              final newPrice = double.tryParse(priceText);
+              
+              if (newPrice != null && newPrice >= 0 && newPrice != item.price) {
+                try {
+                  await _dbService.updateItemPriceForPresentAndFuture(
+                    item.name,
+                    widget.event.name,
+                    widget.event.date,
+                    newPrice,
+                  );
+                  _loadItems();
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Price updated for ${item.name}'),
+                        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              } else {
+                Navigator.pop(context);
+              }
+            },
+            child: Text(
+              'Save',
+              style: TextStyle(
+                color: AppTheme.darkPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    priceController.dispose();
+  }
+
   Future<void> _addItem() async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -488,15 +601,59 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
                           ),
                         ),
                         Flexible(
-                          child: Text(
-                            _formatPrice(basePrice),
-                            style: TextStyle(
-                              color: AppTheme.darkPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            textAlign: TextAlign.end,
-                            overflow: TextOverflow.ellipsis,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (variantSelection == null)
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _editItemPrice(item);
+                                  },
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: Text(
+                                    _formatPrice(basePrice),
+                                    style: TextStyle(
+                                      color: AppTheme.darkPrimary,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    textAlign: TextAlign.end,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                )
+                              else
+                                Text(
+                                  _formatPrice(basePrice),
+                                  style: TextStyle(
+                                    color: AppTheme.darkPrimary,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.end,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              if (variantSelection == null)
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.edit_outlined,
+                                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                    size: 16,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _editItemPrice(item);
+                                  },
+                                  tooltip: 'Edit Item Price',
+                                ),
+                            ],
                           ),
                         ),
                       ],
@@ -941,6 +1098,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       context: context,
       builder: (context) => _VariantsDialog(
         item: item,
+        event: widget.event,
         isDark: isDark,
         dbService: _dbService,
       ),
@@ -955,6 +1113,7 @@ class _EventItemsScreenState extends State<EventItemsScreen> {
       context: context,
       builder: (context) => _AddOnsDialog(
         item: item,
+        event: widget.event,
         isDark: isDark,
         dbService: _dbService,
       ),
@@ -2199,11 +2358,13 @@ class _AddedAddOn {
 
 class _VariantsDialog extends StatefulWidget {
   final Item item;
+  final Event event;
   final bool isDark;
   final DatabaseService dbService;
 
   const _VariantsDialog({
     required this.item,
+    required this.event,
     required this.isDark,
     required this.dbService,
   });
@@ -2801,6 +2962,8 @@ class _VariantsDialogState extends State<_VariantsDialog> {
                   await widget.dbService.updateVariantPriceForPresentAndFuture(
                     widget.item.id!,
                     variant.name,
+                    widget.event.name,
+                    widget.event.date,
                     newPrice,
                   );
                   _refreshVariants();
@@ -2848,11 +3011,13 @@ class _VariantsDialogState extends State<_VariantsDialog> {
 
 class _AddOnsDialog extends StatefulWidget {
   final Item item;
+  final Event event;
   final bool isDark;
   final DatabaseService dbService;
 
   const _AddOnsDialog({
     required this.item,
+    required this.event,
     required this.isDark,
     required this.dbService,
   });
@@ -2899,6 +3064,120 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
     setState(() {
       _addOnsFuture = widget.dbService.getAddOnsByItem(widget.item.id!);
     });
+  }
+
+  Future<void> _editAddOnPrice(AddOn addOn) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final priceController = TextEditingController(text: addOn.price.toStringAsFixed(2));
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Edit ${addOn.name} Price',
+          style: TextStyle(
+            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: TextField(
+          controller: priceController,
+          keyboardType: TextInputType.numberWithOptions(decimal: true),
+          style: TextStyle(
+            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+          ),
+          decoration: InputDecoration(
+            labelText: 'Price',
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: AppTheme.darkPrimary,
+                width: 2,
+              ),
+            ),
+            filled: true,
+            fillColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+            prefixText: 'Rs. ',
+            prefixStyle: TextStyle(
+              color: isDark ? AppTheme.darkText : AppTheme.lightText,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              final priceText = priceController.text.trim();
+              final newPrice = double.tryParse(priceText);
+              
+              if (newPrice != null && newPrice >= 0 && newPrice != addOn.price) {
+                try {
+                  await widget.dbService.updateAddOnPriceForPresentAndFuture(
+                    widget.item.id!,
+                    addOn.name,
+                    widget.event.name,
+                    widget.event.date,
+                    newPrice,
+                  );
+                  _refreshAddOns();
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Price updated for ${addOn.name}'),
+                        backgroundColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 1),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              } else {
+                Navigator.pop(context);
+              }
+            },
+            child: Text(
+              'Save',
+              style: TextStyle(
+                color: AppTheme.darkPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    priceController.dispose();
   }
 
   Future<void> _deleteAddOn(AddOn addOn) async {
@@ -3533,16 +3812,35 @@ class _AddOnsDialogState extends State<_AddOnsDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Flexible(
-              child: Text(
-                _EventItemsScreenState.formatPrice(addOn.price),
-                style: TextStyle(
-                  color: AppTheme.darkPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
+              child: TextButton(
+                onPressed: () => _editAddOnPrice(addOn),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
+                child: Text(
+                  _EventItemsScreenState.formatPrice(addOn.price),
+                  style: TextStyle(
+                    color: AppTheme.darkPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
               ),
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.edit_outlined,
+                color: widget.isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                size: 18,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () => _editAddOnPrice(addOn),
+              tooltip: 'Edit Price',
             ),
             IconButton(
               icon: Icon(

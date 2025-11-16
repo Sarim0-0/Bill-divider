@@ -145,16 +145,12 @@ class _FinalDetailsScreenState extends State<FinalDetailsScreen> {
             color: isDark ? AppTheme.darkText : AppTheme.lightText,
           ),
           onPressed: () {
-            if (widget.returnToEvents) {
-              // Navigate back to AddEventScreen
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const AddEventScreen()),
-                (route) => route.isFirst,
-              );
-            } else {
-              Navigator.pop(context, true);
-            }
+            // Always navigate back to HomeScreen
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              (route) => false,
+            );
           },
         ),
       ),
@@ -487,22 +483,12 @@ class _FinalDetailsScreenState extends State<FinalDetailsScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        if (widget.returnToEvents) {
-                          // Navigate back to AddEventScreen
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (context) => const AddEventScreen()),
-                            (route) => route.isFirst,
-                          );
-                        } else if (Navigator.canPop(context)) {
-                          Navigator.pop(context, true);
-                        } else {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (context) => const HomeScreen()),
-                            (route) => false,
-                          );
-                        }
+                        // Always navigate back to HomeScreen
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (context) => const HomeScreen()),
+                          (route) => false,
+                        );
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.darkPrimary,

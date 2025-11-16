@@ -665,26 +665,24 @@ class DatabaseService {
   }
 
   /// Update price for all items with the same name in present and future events only
+  /// Updates prices for events with the same event name from the given event date onwards
   /// Returns the number of items updated
-  Future<int> updateItemPriceForPresentAndFuture(String itemName, double newPrice) async {
+  Future<int> updateItemPriceForPresentAndFuture(String itemName, String eventName, String eventDate, double newPrice) async {
     final db = await database;
-    
-    // Get today's date at midnight for comparison
-    final today = DateTime.now();
-    final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
     
     // Update items where:
     // 1. The item name matches
-    // 2. The event date is today or in the future
+    // 2. The event name matches
+    // 3. The event date is >= the given event date
     final result = await db.rawUpdate('''
       UPDATE items
       SET price = ?
       WHERE name = ? 
       AND event_id IN (
         SELECT id FROM events 
-        WHERE date >= ?
+        WHERE name = ? AND date >= ?
       )
-    ''', [newPrice, itemName, todayStr]);
+    ''', [newPrice, itemName, eventName, eventDate]);
     
     return result;
   }
@@ -731,28 +729,28 @@ class DatabaseService {
   }
 
   /// Update price for all variants with the same name for the same item
-  Future<int> updateVariantPriceForPresentAndFuture(int itemId, String variantName, double newPrice) async {
+  /// Updates prices for events with the same event name from the given event date onwards
+  Future<int> updateVariantPriceForPresentAndFuture(int itemId, String variantName, String eventName, String eventDate, double newPrice) async {
     final db = await database;
     
-    // Get today's date at midnight for comparison
-    final today = DateTime.now();
-    final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    // Get the item name first to find matching items
+    final item = await getItemById(itemId);
+    if (item == null) return 0;
     
     // Update variants where:
     // 1. The variant name matches
-    // 2. The item_id matches
-    // 3. The item belongs to an event that is today or in the future
+    // 2. The item name matches
+    // 3. The item belongs to an event with the same name and date >= the given event date
     final result = await db.rawUpdate('''
       UPDATE variants
       SET price = ?
       WHERE name = ? 
-      AND item_id = ?
       AND item_id IN (
         SELECT i.id FROM items i
         INNER JOIN events e ON i.event_id = e.id
-        WHERE e.date >= ?
+        WHERE i.name = ? AND e.name = ? AND e.date >= ?
       )
-    ''', [newPrice, variantName, itemId, todayStr]);
+    ''', [newPrice, variantName, item.name, eventName, eventDate]);
     
     return result;
   }
@@ -799,28 +797,28 @@ class DatabaseService {
   }
 
   /// Update price for all add-ons with the same name for the same item
-  Future<int> updateAddOnPriceForPresentAndFuture(int itemId, String addOnName, double newPrice) async {
+  /// Updates prices for events with the same event name from the given event date onwards
+  Future<int> updateAddOnPriceForPresentAndFuture(int itemId, String addOnName, String eventName, String eventDate, double newPrice) async {
     final db = await database;
     
-    // Get today's date at midnight for comparison
-    final today = DateTime.now();
-    final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    // Get the item name first to find matching items
+    final item = await getItemById(itemId);
+    if (item == null) return 0;
     
     // Update add-ons where:
     // 1. The add-on name matches
-    // 2. The item_id matches
-    // 3. The item belongs to an event that is today or in the future
+    // 2. The item belongs to an event with the same name and date >= the given event date
+    // 3. The item name matches
     final result = await db.rawUpdate('''
       UPDATE add_ons
       SET price = ?
       WHERE name = ? 
-      AND item_id = ?
       AND item_id IN (
         SELECT i.id FROM items i
         INNER JOIN events e ON i.event_id = e.id
-        WHERE e.date >= ?
+        WHERE i.name = ? AND e.name = ? AND e.date >= ?
       )
-    ''', [newPrice, addOnName, itemId, todayStr]);
+    ''', [newPrice, addOnName, item.name, eventName, eventDate]);
     
     return result;
   }
@@ -1218,8 +1216,9 @@ class DatabaseService {
       final tableNames = [
         'event_person_paid_status',
         'item_person_assignments',
+        'event_order_item_addons',
         'event_payment_settings',
-        'order_items',
+        'event_order_items',
         'item_addon_selections',
         'item_variant_selections',
         'add_ons',
@@ -1235,7 +1234,8 @@ class DatabaseService {
         final tableExists = tables.any((table) => table['name'] == tableName);
         if (tableExists) {
           try {
-            await db.delete(tableName);
+            // Use DELETE FROM instead of db.delete() to ensure all rows are removed
+            await db.execute('DELETE FROM $tableName');
           } catch (e) {
             // Ignore errors if table doesn't exist or is empty
             print('Warning: Could not delete from $tableName: $e');
