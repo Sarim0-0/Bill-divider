@@ -24,7 +24,7 @@ class DatabaseService {
     String path = join(await getDatabasesPath(), 'bill_divider.db');
     return await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -205,6 +205,12 @@ class DatabaseService {
         )
       ''');
     }
+    if (oldVersion < 13) {
+      // Add paid_by_person_id column to event_payment_settings
+      try {
+        await db.execute('ALTER TABLE event_payment_settings ADD COLUMN paid_by_person_id INTEGER');
+      } catch (_) {}
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -335,7 +341,9 @@ class DatabaseService {
         discount_percentage REAL,
         is_foodpanda INTEGER DEFAULT 0,
         miscellaneous_amount REAL,
-        FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        paid_by_person_id INTEGER,
+        FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+        FOREIGN KEY (paid_by_person_id) REFERENCES people(id) ON DELETE SET NULL
       )
     ''');
 
@@ -1019,6 +1027,7 @@ class DatabaseService {
     double? discountPercentage,
     bool? isFoodpanda,
     double? miscellaneousAmount,
+    int? paidByPersonId,
   }) async {
     final db = await database;
     final existing = await getEventPaymentSettings(eventId);
@@ -1032,6 +1041,7 @@ class DatabaseService {
       'discount_percentage': discountPercentage ?? existing?['discount_percentage'],
       'is_foodpanda': isFoodpanda != null ? (isFoodpanda ? 1 : 0) : (existing?['is_foodpanda'] ?? 0),
       'miscellaneous_amount': miscellaneousAmount ?? existing?['miscellaneous_amount'],
+      'paid_by_person_id': paidByPersonId ?? existing?['paid_by_person_id'],
     };
 
     await db.insert(
@@ -1190,6 +1200,87 @@ class DatabaseService {
     }
     
     return true; // All people with assignments have paid
+  }
+
+  /// Get pending dues breakdown for a person
+  /// Returns a list of maps with structure:
+  /// {
+  ///   'creditor_id': int,
+  ///   'creditor_name': String,
+  ///   'event_id': int,
+  ///   'event_name': String,
+  ///   'event_date': String,
+  ///   'amount': double,
+  /// }
+  /// Only includes events where the person has unpaid assignments
+  Future<List<Map<String, dynamic>>> getPersonPendingDuesBreakdown(int personId) async {
+    final db = await database;
+    
+    // Get all events where the person has assignments
+    final List<Map<String, dynamic>> eventsWithAssignments = await db.rawQuery('''
+      SELECT DISTINCT 
+        e.id as event_id,
+        e.name as event_name,
+        e.date as event_date
+      FROM events e
+      INNER JOIN event_order_items eoi ON e.id = eoi.event_id
+      INNER JOIN item_person_assignments ipa ON eoi.id = ipa.order_item_id
+      WHERE ipa.person_id = ?
+    ''', [personId]);
+    
+    if (eventsWithAssignments.isEmpty) {
+      return [];
+    }
+    
+    List<Map<String, dynamic>> pendingDues = [];
+    
+    // For each event, check if person has paid and get creditor info
+    for (var eventData in eventsWithAssignments) {
+      final eventId = eventData['event_id'] as int;
+      
+      // Check if person has paid for this event
+      final hasPaid = await hasPersonPaidForEvent(eventId, personId);
+      if (hasPaid) {
+        continue; // Skip paid events
+      }
+      
+      // Get the person who paid for this event (creditor)
+      final paymentSettings = await getEventPaymentSettings(eventId);
+      final creditorId = paymentSettings?['paid_by_person_id'] as int?;
+      
+      if (creditorId == null) {
+        continue; // Skip events where no one is marked as having paid
+      }
+      
+      // Get creditor name
+      final creditor = await getPersonById(creditorId);
+      if (creditor == null) {
+        continue; // Skip if creditor doesn't exist
+      }
+      
+      // Calculate total amount owed by this person in this event
+      final assignments = await db.rawQuery('''
+        SELECT SUM(ipa.amount) as total_amount
+        FROM item_person_assignments ipa
+        INNER JOIN event_order_items eoi ON ipa.order_item_id = eoi.id
+        WHERE eoi.event_id = ? AND ipa.person_id = ?
+      ''', [eventId, personId]);
+      
+      final totalAmount = (assignments.first['total_amount'] as num?)?.toDouble() ?? 0.0;
+      
+      if (totalAmount > 0) {
+        pendingDues.add({
+          'creditor_id': creditorId,
+          'creditor_name': creditor.name,
+          'event_id': eventId,
+          'event_name': eventData['event_name'] as String,
+          'event_date': eventData['event_date'] as String,
+          'amount': totalAmount,
+        });
+      }
+    }
+    
+    return pendingDues;
   }
 
   Future<void> closeDatabase() async {

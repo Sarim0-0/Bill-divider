@@ -39,6 +39,7 @@ class _DivisionScreenState extends State<DivisionScreen> {
   double _sumTotal = 0.0;
   List<Person> _people = [];
   Map<int, Set<int>> _itemPersonSelections = {}; // order_item_id -> Set<person_id>
+  int? _paidByPersonId; // Person who paid for the event
   bool _isLoading = true;
 
   @override
@@ -51,9 +52,19 @@ class _DivisionScreenState extends State<DivisionScreen> {
     _calculateItemTotals();
     await _loadPeople();
     await _loadExistingAssignments();
+    await _loadPaidByPerson();
     setState(() {
       _isLoading = false;
     });
+  }
+
+  Future<void> _loadPaidByPerson() async {
+    final settings = await _dbService.getEventPaymentSettings(widget.event.id!);
+    if (settings != null && settings['paid_by_person_id'] != null) {
+      setState(() {
+        _paidByPersonId = settings['paid_by_person_id'] as int?;
+      });
+    }
   }
 
   Future<void> _loadPeople() async {
@@ -687,6 +698,84 @@ class _DivisionScreenState extends State<DivisionScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ],
+                  const SizedBox(height: 24),
+                  // Paid By Dropdown
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Paid By:',
+                          style: TextStyle(
+                            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int?>(
+                          value: _paidByPersonId,
+                          decoration: InputDecoration(
+                            hintText: 'Select person who paid',
+                            hintStyle: TextStyle(
+                              color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: isDark ? AppTheme.darkSurface : AppTheme.lightTextSecondary.withOpacity(0.3),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: AppTheme.darkPrimary,
+                                width: 2,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: isDark ? AppTheme.darkBackground : AppTheme.lightBackground,
+                          ),
+                          dropdownColor: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+                          style: TextStyle(
+                            color: isDark ? AppTheme.darkText : AppTheme.lightText,
+                          ),
+                          items: [
+                            DropdownMenuItem<int?>(
+                              value: null,
+                              child: Text(
+                                'None',
+                                style: TextStyle(
+                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                            ),
+                            ..._people.map((person) {
+                              return DropdownMenuItem<int?>(
+                                value: person.id,
+                                child: Text(person.name),
+                              );
+                            }),
+                          ],
+                          onChanged: (value) async {
+                            setState(() {
+                              _paidByPersonId = value;
+                            });
+                            // Save to database
+                            await _dbService.saveEventPaymentSettings(
+                              eventId: widget.event.id!,
+                              paidByPersonId: value,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   // Next Button
                   SizedBox(

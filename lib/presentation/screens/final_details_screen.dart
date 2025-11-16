@@ -16,6 +16,7 @@ class FinalDetailsScreen extends StatefulWidget {
   final double? miscellaneousAmount;
   final double? calculatedTotal;
   final bool returnToEvents; // If true, Close button returns to events list
+  final VoidCallback? onClose; // Custom callback when closing (if provided, overrides default navigation). Called after popping this screen.
 
   const FinalDetailsScreen({
     super.key,
@@ -28,6 +29,7 @@ class FinalDetailsScreen extends StatefulWidget {
     required this.miscellaneousAmount,
     required this.calculatedTotal,
     this.returnToEvents = false,
+    this.onClose,
   });
 
   @override
@@ -93,6 +95,21 @@ class _FinalDetailsScreenState extends State<FinalDetailsScreen> {
       }
     }
     
+    // Check if there's a "paid by" person and automatically mark them as paid
+    final paymentSettings = await _dbService.getEventPaymentSettings(widget.event.id!);
+    if (paymentSettings != null && paymentSettings['paid_by_person_id'] != null) {
+      final paidByPersonId = paymentSettings['paid_by_person_id'] as int;
+      if (!paidPersonIds.contains(paidByPersonId)) {
+        // Automatically mark the person who paid as paid
+        await _dbService.savePersonPaidStatus(
+          eventId: widget.event.id!,
+          personId: paidByPersonId,
+          isPaid: true,
+        );
+        paidPersonIds.add(paidByPersonId);
+      }
+    }
+    
     setState(() {
       _people = people;
       _personTotals = personTotals;
@@ -145,12 +162,17 @@ class _FinalDetailsScreenState extends State<FinalDetailsScreen> {
             color: isDark ? AppTheme.darkText : AppTheme.lightText,
           ),
           onPressed: () {
-            // Always navigate back to HomeScreen
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const HomeScreen()),
-              (route) => false,
-            );
+            if (widget.onClose != null) {
+              Navigator.pop(context);
+              widget.onClose!();
+            } else {
+              // Default: navigate back to HomeScreen
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                (route) => false,
+              );
+            }
           },
         ),
       ),
@@ -483,12 +505,17 @@ class _FinalDetailsScreenState extends State<FinalDetailsScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        // Always navigate back to HomeScreen
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (context) => const HomeScreen()),
-                          (route) => false,
-                        );
+                        if (widget.onClose != null) {
+                          Navigator.pop(context);
+                          widget.onClose!();
+                        } else {
+                          // Default: navigate back to HomeScreen
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const HomeScreen()),
+                            (route) => false,
+                          );
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.darkPrimary,

@@ -3,6 +3,7 @@ import '../../models/person.dart';
 import '../../services/database_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'person_details_screen.dart';
+import 'pending_dues_details_screen.dart';
 
 class AddPeopleScreen extends StatefulWidget {
   const AddPeopleScreen({super.key});
@@ -364,12 +365,27 @@ class _AddPeopleScreenState extends State<AddPeopleScreen> {
                           onPressed: () => _deletePerson(person),
                         ),
                         onTap: () async {
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => PersonDetailsScreen(person: person),
-                            ),
-                          );
+                          final unpaidCount = _unpaidCounts[person.id] ?? 0;
+                          bool? result;
+                          
+                          // If person has unpaid events, show pending dues screen
+                          if (unpaidCount > 0) {
+                            result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PendingDuesDetailsScreen(person: person),
+                              ),
+                            );
+                          } else {
+                            // Otherwise show person details screen
+                            result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PersonDetailsScreen(person: person),
+                              ),
+                            );
+                          }
+                          
                           // Reload to update unpaid counts after returning
                           if (result == true) {
                             _loadPeople();
